@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thaitruck"
+version = "0.2.1"
+description = "Spicy data blending and time-series DataFrame merging — Thai food truck style."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=1.23",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[project.urls]
+Homepage = "https://github.com/sgtidwell/thaitruck"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thaitruck"]
