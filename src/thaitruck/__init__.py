@@ -8,7 +8,7 @@ from thaitruck.sticky_rice import sticky_rice
 from thaitruck.satay import satay
 from thaitruck.tom_kha import tom_kha
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "fried_rice",
