@@ -1,5 +1,9 @@
 # ThaiTruck
 
+<p align="center">
+  <img src="assets/ThaiTruckLogo.png" alt="ThaiTruck Logo" width="400"/>
+</p>
+
 **Spicy data blending and time-series DataFrame merging — Thai food truck style.**
 
 You've got six DataFrames. Three different date column names. Two frequencies.  
