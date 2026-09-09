@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from thaitruck.exceptions import InvalidHeatLevel
+
 _HEAT_IQR = {1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0}
 
 
@@ -21,7 +23,7 @@ def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
         1 = IQR x3.0 (extreme outliers only) … 5 = IQR x1.0 (very sensitive).
     """
     if heat not in _HEAT_IQR:
-        raise ValueError(f"heat must be 1–5, got {heat}")
+        raise InvalidHeatLevel(f"heat must be 1–5, got {heat}")
 
     multiplier = _HEAT_IQR[heat]
     rows = []

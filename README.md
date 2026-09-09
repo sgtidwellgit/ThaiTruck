@@ -271,6 +271,26 @@ tom_kha(
 
 ---
 
+### `massaman` — The Slow-Cooked Curry
+
+*Rolling-window aggregations and percentage change, slow-cooked into new columns.*
+
+Adds rolling mean/std/sum/min/max/median columns for a window, plus row-over-row
+percentage change. Named for the curry that takes time and rewards patience.
+
+```python
+from thaitruck import massaman
+
+result = massaman(df, "price", window=20, ops=["mean", "std", "pct_change"])
+# Adds columns: price_roll_mean_20, price_roll_std_20, price_pct_change
+```
+
+Rolling ops (`"mean"`, `"std"`, `"sum"`, `"min"`, `"max"`, `"median"`) are windowed
+and suffixed with the window size. `"pct_change"` is not windowed — it's a straight
+row-over-row percent change.
+
+---
+
 ## The Heat Guide
 
 Most ThaiTruck functions accept a `heat` parameter (1–5). The metaphor is
@@ -296,16 +316,74 @@ Requires Python ≥ 3.9 and pandas ≥ 1.5.
 
 ---
 
+## Ergonomics
+
+Every DataFrame function is also available as a pandas accessor, and can be
+chained through `TruckPipeline` without intermediate variables.
+
+```python
+import thaitruck  # registers the `.truck` accessor as a side effect
+
+df.truck.orange_chicken(heat=3)
+df.truck.larb()
+df.truck.satay({"sector": "Tech"})
+```
+
+```python
+from thaitruck import TruckPipeline
+
+result = (
+    TruckPipeline(raw_df)
+    .orange_chicken(heat=3)
+    .fried_rice(earnings_df, freq="D")
+    .satay({"sector": "Tech"})
+    .result()
+)
+```
+
+`orange_chicken`, `larb`, `satay`, `fried_rice`, and `massaman` are all callable
+either way — the accessor and pipeline are thin wrappers, not a new implementation.
+
+---
+
+## Custom Exceptions
+
+Every raise that used to be a bare `ValueError`/`TypeError` for a package-specific
+condition is now also a `ThaiTruckError`, so you can catch broadly or narrowly:
+
+```python
+from thaitruck import ThaiTruckError, DateColumnNotFound, InvalidHeatLevel, SkewTypeError
+
+try:
+    fried_rice(df_without_a_date_column)
+except DateColumnNotFound:
+    ...
+
+# Or catch anything ThaiTruck-specific:
+try:
+    orange_chicken(df, heat=9)
+except ThaiTruckError:
+    ...
+```
+
+Each is still a subclass of the exception type it replaces (`DateColumnNotFound`
+and `InvalidHeatLevel` are `ValueError`s, `SkewTypeError` is a `TypeError`), so
+existing `except ValueError` / `except TypeError` code keeps working unchanged.
+
+---
+
 ## The Full Menu
 
 ```python
-from thaitruck import fried_rice    # time-series DataFrame merger
+from thaitruck import fried_rice     # time-series DataFrame merger
 from thaitruck import orange_chicken # data normalization and cleaning
 from thaitruck import larb           # fast statistical profiling
 from thaitruck import pad_thai       # string padding and alignment
 from thaitruck import sticky_rice    # persistent disk caching
 from thaitruck import satay          # expressive DataFrame slicing
 from thaitruck import tom_kha        # deep config dict merging
+from thaitruck import massaman       # rolling aggregations and percentage change
+from thaitruck import TruckPipeline  # fluent chained pipeline
 ```
 
 ---

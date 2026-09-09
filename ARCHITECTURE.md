@@ -23,7 +23,11 @@ ThaiTruck/
 │       ├── pad_thai.py         # string padding / alignment
 │       ├── sticky_rice.py      # persistent disk cache
 │       ├── satay.py            # expressive DataFrame slicing
-│       └── tom_kha.py          # deep config dict merging
+│       ├── tom_kha.py          # deep config dict merging
+│       ├── massaman.py         # rolling aggregations and percentage change
+│       ├── exceptions.py       # ThaiTruckError hierarchy (shared leaf module)
+│       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
+│       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
 └── tests/
     ├── test_fried_rice.py
     ├── test_orange_chicken.py
@@ -31,16 +35,31 @@ ThaiTruck/
     ├── test_pad_thai.py
     ├── test_sticky_rice.py
     ├── test_satay.py
-    └── test_tom_kha.py
+    ├── test_tom_kha.py
+    ├── test_massaman.py
+    ├── test_exceptions.py
+    ├── test_pipeline.py
+    └── test_accessor.py
 ```
 
 ---
 
 ## Module Dependency Map
 
-All seven modules are **independent** — none imports from another. All
-external dependencies flow in from `pandas` and `numpy` only. `sticky_rice`
-uses stdlib only (`pickle`, `hashlib`, `pathlib`, `time`, `functools`).
+The 8 utility modules (`fried_rice`, `orange_chicken`, `larb`, `pad_thai`,
+`sticky_rice`, `satay`, `tom_kha`, `massaman`) are **independent of each
+other** — none imports another utility module. All external dependencies flow
+in from `pandas` and `numpy` only. `sticky_rice` and `tom_kha` use stdlib only.
+
+Two exceptions to "independent," both intentional:
+
+- **`exceptions`** is a shared, dependency-free leaf module. `fried_rice`,
+  `orange_chicken`, `larb`, and `satay` import it for their error types. This
+  doesn't break utility-module independence — none of them import *each
+  other*, they all import the same leaf.
+- **`pipeline`** and **`accessor`** are a composition layer, not utility
+  modules. Like `__init__.py`, their entire job is to call the utility
+  modules, so they depend on several of them by design.
 
 ```mermaid
 graph TD
@@ -52,6 +71,10 @@ graph TD
         SR[sticky_rice]
         ST[satay]
         TK[tom_kha]
+        MM[massaman]
+        EX[exceptions]
+        PIPE[pipeline]
+        ACC[accessor]
         INIT[__init__.py]
     end
 
@@ -68,23 +91,44 @@ graph TD
     INIT --> SR
     INIT --> ST
     INIT --> TK
+    INIT --> MM
+    INIT --> EX
+    INIT --> PIPE
+    INIT --> ACC
 
     FR --> PD
     FR --> NP
+    FR --> EX
     OC --> PD
+    OC --> EX
     LB --> PD
+    LB --> EX
     PT --> PD
     SR --> SL
     ST --> PD
+    ST --> EX
+    MM --> PD
+
+    PIPE --> FR
+    PIPE --> OC
+    PIPE --> ST
+    PIPE --> MM
+
+    ACC --> FR
+    ACC --> OC
+    ACC --> LB
+    ACC --> ST
+    ACC --> MM
 ```
 
 ---
 
 ## Architectural Layers
 
-ThaiTruck has a single layer — a flat collection of independent utility
-functions. There is no domain model, no service layer, and no persistence
-layer. The architecture is intentionally minimal.
+ThaiTruck has two layers: a flat collection of independent utility functions,
+and a thin composition layer on top of them. There is no domain model, no
+service layer, and no persistence layer. The architecture is intentionally
+minimal.
 
 ```mermaid
 graph TD
@@ -92,11 +136,17 @@ graph TD
         INIT[thaitruck.__init__<br/>re-exports all functions]
     end
 
+    subgraph Composition Layer
+        PIPE[pipeline.TruckPipeline<br/>fluent chaining]
+        ACC[accessor.TruckAccessor<br/>df.truck.* methods]
+    end
+
     subgraph DataFrame Utilities
         FR[fried_rice<br/>merge · resample · fill]
         OC[orange_chicken<br/>clean · coerce · normalise]
         LB[larb<br/>profile · outliers]
         ST[satay<br/>slice · filter · select]
+        MM[massaman<br/>rolling · pct_change]
     end
 
     subgraph String Utilities
@@ -106,11 +156,16 @@ graph TD
     subgraph Infrastructure Utilities
         SR[sticky_rice<br/>cache · ttl · disk]
         TK[tom_kha<br/>deep merge · defaults]
+        EX[exceptions<br/>ThaiTruckError hierarchy]
     end
 
-    INIT --> FR & OC & LB & ST
+    INIT --> PIPE & ACC
+    INIT --> FR & OC & LB & ST & MM
     INIT --> PT
-    INIT --> SR & TK
+    INIT --> SR & TK & EX
+
+    PIPE --> FR & OC & ST & MM
+    ACC --> FR & OC & LB & ST & MM
 ```
 
 ---
@@ -222,6 +277,68 @@ Merge strategy: `defaults` → `configs[0]` → `configs[1]` → … (last wins)
 Nested dicts are merged recursively via `_deep_merge`. Lists and scalars are
 overwritten, never appended.
 
+### `massaman`
+
+```python
+def massaman(
+    df: pd.DataFrame,
+    column: str,
+    *,
+    window: int = 20,
+    ops: list[str] | None = None,
+) -> pd.DataFrame
+```
+
+Adds `{column}_roll_{op}_{window}` for windowed ops (`mean`, `std`, `sum`,
+`min`, `max`, `median`) and `{column}_pct_change` for the non-windowed
+`pct_change` op. Raises `KeyError` for a missing column, `ValueError` for an
+unrecognized op.
+
+### `exceptions`
+
+```python
+class ThaiTruckError(Exception): ...
+class DateColumnNotFound(ThaiTruckError, ValueError): ...
+class InvalidHeatLevel(ThaiTruckError, ValueError): ...
+class SkewTypeError(ThaiTruckError, TypeError): ...
+```
+
+Dependency-free leaf module. Each concrete exception also inherits the
+built-in type it replaces, so existing `except ValueError` / `except
+TypeError` call sites keep working.
+
+### `pipeline.TruckPipeline`
+
+```python
+class TruckPipeline:
+    def __init__(self, df: pd.DataFrame) -> None: ...
+    def orange_chicken(self, heat: int = 3) -> "TruckPipeline": ...
+    def fried_rice(self, *dfs, **kwargs) -> "TruckPipeline": ...
+    def satay(self, *skewers) -> "TruckPipeline": ...
+    def massaman(self, column: str, *, window: int = 20, ops=None) -> "TruckPipeline": ...
+    def result(self) -> pd.DataFrame: ...
+```
+
+Each chain method returns a new `TruckPipeline` wrapping the transformed
+DataFrame; `.result()` unwraps it. `larb` is intentionally not a chain method
+— it returns a profile, not a transformed version of the input.
+
+### `accessor.TruckAccessor`
+
+```python
+@pd.api.extensions.register_dataframe_accessor("truck")
+class TruckAccessor:
+    def __init__(self, pandas_obj: pd.DataFrame) -> None: ...
+    def orange_chicken(self, heat: int = 3) -> pd.DataFrame: ...
+    def larb(self, heat: int = 3) -> pd.DataFrame: ...
+    def satay(self, *skewers) -> pd.DataFrame: ...
+    def fried_rice(self, *dfs, **kwargs) -> pd.DataFrame: ...
+    def massaman(self, column: str, *, window: int = 20, ops=None) -> pd.DataFrame: ...
+```
+
+Registration happens as an import side effect in `thaitruck/__init__.py`
+(`from thaitruck import accessor`). Thin delegation only — no separate logic.
+
 ---
 
 ## Shared Patterns
@@ -318,6 +435,9 @@ in `test_sticky_rice.py` for time-based TTL testing.
 ```
 tests/test_<module>.py  →  src/thaitruck/<module>.py
 ```
+
+`test_accessor.py` imports `thaitruck` (not just the function under test) to
+trigger accessor registration before asserting `df.truck` exists.
 
 `sticky_rice` tests use `pytest`'s `tmp_path` fixture to isolate cache
 files per test run — no `.thaitruck_cache/` pollution in the working directory.

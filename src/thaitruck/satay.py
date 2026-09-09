@@ -4,6 +4,8 @@ from typing import Any, Callable, Union
 
 import pandas as pd
 
+from thaitruck.exceptions import SkewTypeError
+
 
 def satay(df: pd.DataFrame, *skewers: Any) -> pd.DataFrame:
     """Slice a DataFrame with expressive multi-dimensional selectors.
@@ -71,7 +73,7 @@ def satay(df: pd.DataFrame, *skewers: Any) -> pd.DataFrame:
             result = result[skewer(result)]
 
         else:
-            raise TypeError(
+            raise SkewTypeError(
                 f"Unrecognised skewer type {type(skewer).__name__}. "
                 "Expected str, list, slice, tuple, dict, or callable."
             )

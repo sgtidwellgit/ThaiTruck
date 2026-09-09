@@ -4,6 +4,8 @@ import re
 
 import pandas as pd
 
+from thaitruck.exceptions import InvalidHeatLevel
+
 _BOOL_TRUE = {"true", "yes", "y", "t", "1", "on"}
 _BOOL_FALSE = {"false", "no", "n", "f", "0", "off"}
 
@@ -68,7 +70,7 @@ def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
         5 = + drop columns with >50% nulls (napalm).
     """
     if heat < 1 or heat > 5:
-        raise ValueError(f"heat must be 1–5, got {heat}")
+        raise InvalidHeatLevel(f"heat must be 1–5, got {heat}")
 
     df = df.copy()
 

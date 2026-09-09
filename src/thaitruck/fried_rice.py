@@ -6,6 +6,8 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
+from thaitruck.exceptions import DateColumnNotFound
+
 _DATE_HINTS = {
     "date", "ts", "timestamp", "time", "report_date", "datetime",
     "dt", "period", "day", "trade_date", "as_of_date", "effective_date",
@@ -117,7 +119,7 @@ def fried_rice(
             df[col] = pd.to_datetime(df[col])
             df = df.set_index(col)
         elif not pd.api.types.is_datetime64_any_dtype(df.index):
-            raise ValueError(
+            raise DateColumnNotFound(
                 f"DataFrame {i}: no date column detected. Pass date_col= to specify it."
             )
 
