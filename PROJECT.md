@@ -8,7 +8,7 @@
 
 1. [What ThaiTruck Is](#what-thaitruck-is)
 2. [Repository Layout](#repository-layout)
-3. [Current Menu — All 9 Modules](#current-menu--all-9-modules)
+3. [Current Menu — All 10 Modules](#current-menu--all-10-modules)
 4. [The Heat Guide](#the-heat-guide)
 5. [Architecture](#architecture)
 6. [Tests](#tests)
@@ -38,7 +38,7 @@ The flagship use-case is data engineering work that involves multiple DataFrames
 pip install thaitruck
 ```
 
-The library currently exports **9 functions plus the `TruckPipeline` fluent
+The library currently exports **10 functions plus the `TruckPipeline` fluent
 wrapper**, all accessible from the top-level namespace:
 
 ```python
@@ -51,6 +51,7 @@ from thaitruck import satay           # expressive DataFrame slicing
 from thaitruck import tom_kha         # deep config dict merging
 from thaitruck import massaman        # rolling aggregations and percentage change
 from thaitruck import nam_pla         # schema validation
+from thaitruck import som_tam         # DataFrame diffing
 from thaitruck import TruckPipeline   # fluent chained pipeline
 ```
 
@@ -79,6 +80,7 @@ ThaiTruck/
 │       ├── tom_kha.py          # deep config dict merging
 │       ├── massaman.py         # rolling aggregations and percentage change
 │       ├── nam_pla.py          # schema validation
+│       ├── som_tam.py          # DataFrame diffing
 │       ├── exceptions.py       # ThaiTruckError hierarchy (shared, leaf module)
 │       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
 │       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
@@ -92,6 +94,7 @@ ThaiTruck/
     ├── test_tom_kha.py
     ├── test_massaman.py
     ├── test_nam_pla.py
+    ├── test_som_tam.py
     ├── test_exceptions.py
     ├── test_pipeline.py
     └── test_accessor.py
@@ -99,7 +102,7 @@ ThaiTruck/
 
 ---
 
-## Current Menu — All 9 Modules
+## Current Menu — All 10 Modules
 
 ---
 
@@ -705,6 +708,62 @@ nam_pla(df, spec, strict=True)      # raises ValidationError if not
 
 ---
 
+### `som_tam` — DataFrame Diffing
+
+**File:** `src/thaitruck/som_tam.py`
+
+**Scope decision (locked 2026-09-09):** the one open design question was row
+identity — how does a row in `df_after` map to a row in `df_before`? Resolved
+as: an explicit `key=` column (or list of columns) when given, falling back to
+the existing DataFrame index when not. No automatic key inference.
+
+**Signature:**
+
+```python
+def som_tam(
+    df_before: pd.DataFrame,
+    df_after: pd.DataFrame,
+    *,
+    key: str | list[str] | None = None,
+) -> pd.DataFrame
+```
+
+**Current behavior:**
+
+- Row identity comes from `key` (set as the index on copies of both frames)
+  or, if `key` is `None`, each frame's existing index.
+- Raises `KeyError` if a `key` column is missing from either frame.
+- Raises `ValueError` if the resulting identity has duplicate values in either
+  frame — diffing against a non-unique key is refused rather than guessed at.
+- Returns a DataFrame indexed by row identity with columns `change_type`
+  (`"added"`, `"removed"`, `"modified"`) and `columns_changed` (comma-joined
+  column names, set only for `"modified"` rows). **Unchanged rows are omitted
+  entirely** — the report is diff-only, not a full row-by-row comparison.
+- Value comparison only considers columns present in **both** frames.
+  `NaN == NaN` counts as unchanged (not flagged).
+- **Schema drift** (columns present in one frame but not the other) isn't a
+  row-level concept, so it doesn't appear as a row in the table. It's attached
+  as `result.attrs["columns_added"]` / `result.attrs["columns_removed"]` — a
+  standard pandas mechanism for exactly this kind of side-channel metadata.
+- Never mutates either input.
+- Excluded from `TruckPipeline` for the same reason as `larb`/`nam_pla`: it
+  returns a diff report, not a transformed version of the input. Available via
+  the accessor as `before_df.truck.som_tam(after_df, key=...)`.
+
+**Example:**
+
+```python
+from thaitruck import som_tam
+
+diff = som_tam(before_df, after_df, key="id")
+diff.loc[diff["change_type"] == "modified"]
+diff.attrs["columns_added"]
+```
+
+**Tests:** `tests/test_som_tam.py`
+
+---
+
 ## Ergonomics & Infrastructure (Implemented)
 
 Four items from the former Priority 2/3 roadmap are now implemented.
@@ -717,8 +776,8 @@ Registers `"truck"` as a pandas DataFrame accessor via
 `pd.api.extensions.register_dataframe_accessor`. Registration happens as an
 import side effect — `import thaitruck` (or importing anything from it) is
 enough; no separate call is required. Wraps `orange_chicken`, `larb`, `satay`,
-`fried_rice`, `massaman`, and `nam_pla` — thin delegation, no separate
-implementation. Each wrapper method's signature mirrors its underlying
+`fried_rice`, `massaman`, `nam_pla`, and `som_tam` — thin delegation, no
+separate implementation. Each wrapper method's signature mirrors its underlying
 function exactly (e.g. `df.truck.orange_chicken(heat=3, rename=..., dtypes=...)`,
 `df.truck.fried_rice(other_df, join="inner", ...)`), so a new parameter on the
 function requires a matching update here — there's no `**kwargs` passthrough.
@@ -796,8 +855,9 @@ replaces so existing `except ValueError` / `except TypeError` code keeps working
 
 The original 7 utility modules remain fully independent — none imports from
 another. External dependencies are `pandas` and `numpy` only. `sticky_rice` and
-`tom_kha` use stdlib only. `massaman` and `nam_pla` join them as the eighth and
-ninth independent utility modules (`pandas`/`numpy` only).
+`tom_kha` use stdlib only. `massaman`, `nam_pla`, and `som_tam` join them as
+the eighth, ninth, and tenth independent utility modules (`pandas`/`numpy`
+only).
 
 `exceptions` is a shared, dependency-free leaf module that `fried_rice`,
 `orange_chicken`, `larb`, `satay`, and `nam_pla` import for their error types —
@@ -819,9 +879,10 @@ satay          → pandas, exceptions
 tom_kha        → stdlib only
 massaman       → pandas
 nam_pla        → pandas, numpy, exceptions
+som_tam        → pandas
 exceptions     → stdlib only (leaf)
 pipeline       → fried_rice, orange_chicken, satay, massaman  (composition layer)
-accessor       → fried_rice, orange_chicken, larb, satay, massaman, nam_pla  (composition layer)
+accessor       → fried_rice, orange_chicken, larb, satay, massaman, nam_pla, som_tam  (composition layer)
 ```
 
 ### Shared Patterns
@@ -857,6 +918,7 @@ tests/test_satay.py           ←→  src/thaitruck/satay.py
 tests/test_tom_kha.py         ←→  src/thaitruck/tom_kha.py
 tests/test_massaman.py        ←→  src/thaitruck/massaman.py
 tests/test_nam_pla.py         ←→  src/thaitruck/nam_pla.py
+tests/test_som_tam.py         ←→  src/thaitruck/som_tam.py
 tests/test_exceptions.py      ←→  src/thaitruck/exceptions.py
 tests/test_pipeline.py        ←→  src/thaitruck/pipeline.py
 tests/test_accessor.py        ←→  src/thaitruck/accessor.py
@@ -1004,16 +1066,9 @@ prik_nam_som(df, baseline=reference_df, thresholds={"row_drop_pct": 0.10})
 > above. Expanding windows and lag/lead columns from the original concept are
 > not included; they need a parameter design that wasn't pinned down.
 
-#### `som_tam` — DataFrame Diffing
-
-Compare two DataFrames and surface what changed: added rows, removed rows, changed values, and schema drift. Returns a structured diff report DataFrame.
-
-```python
-from thaitruck import som_tam
-
-diff = som_tam(df_before, df_after)
-# Returns DataFrame with change_type column: "added", "removed", "modified"
-```
+> **`som_tam` is implemented** — see the [Current Menu](#som_tam--dataframe-diffing)
+> above. The row-identity design question (`key=` vs. auto-detection) is
+> resolved there; schema drift surfaces via `.attrs`, not as table rows.
 
 #### `boat_noodles` — Sequential Chunked Processing
 

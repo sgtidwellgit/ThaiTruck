@@ -354,6 +354,41 @@ nam_pla(df, spec, strict=True)      # raises ValidationError if not clean
 
 ---
 
+### `som_tam` — The Diff
+
+*DataFrame diffing, sour-and-tangy Thai salad style — what changed, laid bare.*
+
+Compare a before/after pair of DataFrames and get back which rows were added,
+removed, or modified. Row identity is your call: pass `key` for one or more
+identifying columns, or leave it out to diff by index.
+
+```python
+from thaitruck import som_tam
+
+diff = som_tam(before_df, after_df, key="id")
+print(diff)
+#      change_type columns_changed
+# id
+# 3        added             None
+# 7      removed             None
+# 2      modified           price
+```
+
+Only rows that actually changed appear — unchanged rows are omitted. Column
+additions/removals (schema drift) aren't tied to any one row, so they land in
+`diff.attrs["columns_added"]` / `diff.attrs["columns_removed"]` instead of the
+table itself.
+
+```python
+diff.attrs["columns_added"]     # ["new_column"]
+diff.attrs["columns_removed"]   # []
+```
+
+`NaN == NaN` counts as unchanged (not flagged as a diff), and both inputs are
+validated to have a unique row identity — duplicate keys raise.
+
+---
+
 ## The Heat Guide
 
 Most ThaiTruck functions accept a `heat` parameter (1–5). The metaphor is
@@ -404,8 +439,11 @@ result = (
 )
 ```
 
-`orange_chicken`, `larb`, `satay`, `fried_rice`, and `massaman` are all callable
-either way — the accessor and pipeline are thin wrappers, not a new implementation.
+`orange_chicken`, `larb`, `satay`, `fried_rice`, `massaman`, `nam_pla`, and
+`som_tam` are all callable either way — the accessor and pipeline are thin
+wrappers, not a new implementation. `larb`, `nam_pla`, and `som_tam` are
+accessor-only, not chainable through `TruckPipeline` — they return a report
+rather than a transformed version of the input.
 
 ---
 
@@ -454,6 +492,7 @@ from thaitruck import satay          # expressive DataFrame slicing
 from thaitruck import tom_kha        # deep config dict merging
 from thaitruck import massaman       # rolling aggregations and percentage change
 from thaitruck import nam_pla        # schema validation
+from thaitruck import som_tam        # DataFrame diffing
 from thaitruck import TruckPipeline  # fluent chained pipeline
 ```
 

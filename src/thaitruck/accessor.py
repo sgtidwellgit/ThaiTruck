@@ -15,6 +15,7 @@ from thaitruck.massaman import massaman
 from thaitruck.nam_pla import nam_pla
 from thaitruck.orange_chicken import orange_chicken
 from thaitruck.satay import satay
+from thaitruck.som_tam import som_tam
 
 
 @pd.api.extensions.register_dataframe_accessor("truck")
@@ -84,3 +85,11 @@ class TruckAccessor:
         strict: bool = False,
     ) -> pd.DataFrame:
         return nam_pla(self._df, spec, strict=strict)
+
+    def som_tam(
+        self,
+        df_after: pd.DataFrame,
+        *,
+        key: Optional[Union[str, list]] = None,
+    ) -> pd.DataFrame:
+        return som_tam(self._df, df_after, key=key)

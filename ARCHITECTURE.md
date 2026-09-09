@@ -26,6 +26,7 @@ ThaiTruck/
 │       ├── tom_kha.py          # deep config dict merging
 │       ├── massaman.py         # rolling aggregations and percentage change
 │       ├── nam_pla.py          # schema validation
+│       ├── som_tam.py          # DataFrame diffing
 │       ├── exceptions.py       # ThaiTruckError hierarchy (shared leaf module)
 │       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
 │       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
@@ -39,6 +40,7 @@ ThaiTruck/
     ├── test_tom_kha.py
     ├── test_massaman.py
     ├── test_nam_pla.py
+    ├── test_som_tam.py
     ├── test_exceptions.py
     ├── test_pipeline.py
     └── test_accessor.py
@@ -48,17 +50,18 @@ ThaiTruck/
 
 ## Module Dependency Map
 
-The 9 utility modules (`fried_rice`, `orange_chicken`, `larb`, `pad_thai`,
-`sticky_rice`, `satay`, `tom_kha`, `massaman`, `nam_pla`) are **independent of
-each other** — none imports another utility module. All external dependencies
-flow in from `pandas` and `numpy` only. `sticky_rice` and `tom_kha` use stdlib
-only.
+The 10 utility modules (`fried_rice`, `orange_chicken`, `larb`, `pad_thai`,
+`sticky_rice`, `satay`, `tom_kha`, `massaman`, `nam_pla`, `som_tam`) are
+**independent of each other** — none imports another utility module. All
+external dependencies flow in from `pandas` and `numpy` only. `sticky_rice`
+and `tom_kha` use stdlib only.
 
 Two exceptions to "independent," both intentional:
 
 - **`exceptions`** is a shared, dependency-free leaf module. `fried_rice`,
   `orange_chicken`, `larb`, `satay`, and `nam_pla` import it for their error
-  types. This doesn't break utility-module independence — none of them import
+  types (`som_tam` raises plain `KeyError`/`ValueError`, no custom exception
+  yet). This doesn't break utility-module independence — none of them import
   *each other*, they all import the same leaf.
 - **`pipeline`** and **`accessor`** are a composition layer, not utility
   modules. Like `__init__.py`, their entire job is to call the utility
@@ -76,6 +79,7 @@ graph TD
         TK[tom_kha]
         MM[massaman]
         NP_[nam_pla]
+        SOM[som_tam]
         EX[exceptions]
         PIPE[pipeline]
         ACC[accessor]
@@ -97,6 +101,7 @@ graph TD
     INIT --> TK
     INIT --> MM
     INIT --> NP_
+    INIT --> SOM
     INIT --> EX
     INIT --> PIPE
     INIT --> ACC
@@ -116,6 +121,7 @@ graph TD
     NP_ --> PD
     NP_ --> NP
     NP_ --> EX
+    SOM --> PD
 
     PIPE --> FR
     PIPE --> OC
@@ -128,6 +134,7 @@ graph TD
     ACC --> ST
     ACC --> MM
     ACC --> NP_
+    ACC --> SOM
 ```
 
 ---
@@ -157,6 +164,7 @@ graph TD
         ST[satay<br/>slice · filter · select]
         MM[massaman<br/>rolling · pct_change]
         NP_[nam_pla<br/>schema validation]
+        SOM[som_tam<br/>diffing]
     end
 
     subgraph String Utilities
@@ -170,12 +178,12 @@ graph TD
     end
 
     INIT --> PIPE & ACC
-    INIT --> FR & OC & LB & ST & MM & NP_
+    INIT --> FR & OC & LB & ST & MM & NP_ & SOM
     INIT --> PT
     INIT --> SR & TK & EX
 
     PIPE --> FR & OC & ST & MM
-    ACC --> FR & OC & LB & ST & MM & NP_
+    ACC --> FR & OC & LB & ST & MM & NP_ & SOM
 ```
 
 ---
@@ -356,6 +364,27 @@ Internal helpers (not public):
 - `_check_dtype(series, expected)` — dtype compatibility check
 - `_DTYPE_CHECKS` — maps `float`/`int`/`str`/`bool` to a pandas dtype predicate
 
+### `som_tam`
+
+```python
+def som_tam(
+    df_before: pd.DataFrame,
+    df_after: pd.DataFrame,
+    *,
+    key: str | list[str] | None = None,
+) -> pd.DataFrame
+```
+
+Row identity: `key` column(s) if given (set as the index on copies of both
+frames), else each frame's existing index. Raises `KeyError` for a missing
+`key` column, `ValueError` for a non-unique identity in either frame. Returns
+a DataFrame indexed by row identity with `change_type`
+(`"added"`/`"removed"`/`"modified"`) and `columns_changed` (comma-joined,
+`"modified"` only); unchanged rows are omitted. Value comparison only covers
+columns present in both frames; `NaN == NaN` counts as unchanged. Schema drift
+(columns present in only one frame) is not a row — it's
+`result.attrs["columns_added"]` / `result.attrs["columns_removed"]`.
+
 ### `exceptions`
 
 ```python
@@ -403,6 +432,7 @@ class TruckAccessor:
     def fried_rice(self, *dfs, join: str = "outer", suffix_template=None, **kwargs) -> pd.DataFrame: ...
     def massaman(self, column: str, *, window: int = 20, ops=None) -> pd.DataFrame: ...
     def nam_pla(self, spec: dict, *, strict: bool = False) -> pd.DataFrame: ...
+    def som_tam(self, df_after: pd.DataFrame, *, key=None) -> pd.DataFrame: ...
 ```
 
 Registration happens as an import side effect in `thaitruck/__init__.py`
@@ -426,9 +456,10 @@ This is a package-wide convention, not an enforced interface.
 
 DataFrame modules (`fried_rice`, `orange_chicken`, `larb`, `satay`, `massaman`)
 always accept `pd.DataFrame` and always return `pd.DataFrame`. None mutate
-their input — all operate on a `.copy()`. `nam_pla` also accepts a
-`pd.DataFrame` but returns a violations report DataFrame rather than a
-transformed version of the input (same shape of exception as `larb`).
+their input — all operate on a `.copy()`. `nam_pla` and `som_tam` also accept
+`pd.DataFrame`(s) but return a report DataFrame (violations / diff) rather
+than a transformed version of the input — same shape of exception as `larb`,
+and the reason all three are excluded from `TruckPipeline`.
 
 `pad_thai` mirrors its input type: `str → str`, `list → list`,
 `pd.Series → pd.Series`.

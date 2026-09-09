@@ -9,6 +9,7 @@ from thaitruck.satay import satay
 from thaitruck.tom_kha import tom_kha
 from thaitruck.massaman import massaman
 from thaitruck.nam_pla import nam_pla
+from thaitruck.som_tam import som_tam
 from thaitruck.pipeline import TruckPipeline
 from thaitruck.exceptions import (
     ThaiTruckError,
@@ -31,6 +32,7 @@ __all__ = [
     "tom_kha",
     "massaman",
     "nam_pla",
+    "som_tam",
     "TruckPipeline",
     "ThaiTruckError",
     "DateColumnNotFound",

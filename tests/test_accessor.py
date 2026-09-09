@@ -60,6 +60,12 @@ class TestAccessorMethods:
         result = df.truck.nam_pla({"price": {"min": 0}})
         assert (result["check"] == "min").any()
 
+    def test_som_tam(self):
+        before = pd.DataFrame({"id": [1], "price": [1.0]})
+        after = pd.DataFrame({"id": [1], "price": [2.0]})
+        result = before.truck.som_tam(after, key="id")
+        assert result.loc[1, "change_type"] == "modified"
+
     def test_does_not_mutate_original(self):
         df = pd.DataFrame({"Price": ["1.5"]})
         original_cols = list(df.columns)
