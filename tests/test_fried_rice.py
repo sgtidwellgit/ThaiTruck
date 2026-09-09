@@ -109,3 +109,53 @@ class TestFuzzyColumns:
         result = fried_rice(a, b, fuzzy_columns=True, heat=4)
         assert "close_price" in result.columns
         assert result["close_price"].iloc[0] == 4
+
+
+class TestJoin:
+    def test_outer_is_default_union_of_index(self):
+        a = daily({"price": [1, 2, 3]}, start="2024-01-01")
+        b = daily({"volume": [10, 20, 30]}, start="2024-01-02")
+        result = fried_rice(a, b, join="outer")
+        assert len(result) == 4
+
+    def test_inner_keeps_only_overlap(self):
+        a = daily({"price": [1, 2, 3]}, start="2024-01-01")
+        b = daily({"volume": [10, 20, 30]}, start="2024-01-02")
+        result = fried_rice(a, b, join="inner")
+        assert len(result) == 2
+
+    def test_left_keeps_only_first_frame_index(self):
+        a = daily({"price": [1, 2, 3]}, start="2024-01-01")
+        b = daily({"volume": [10, 20, 30]}, start="2024-01-02")
+        result = fried_rice(a, b, join="left")
+        assert len(result) == 3
+
+    def test_invalid_join_raises(self):
+        a = daily({"price": [1, 2, 3]})
+        b = daily({"volume": [10, 20, 30]})
+        with pytest.raises(ValueError, match="join must be"):
+            fried_rice(a, b, join="bogus")
+
+
+class TestSuffixTemplate:
+    def test_custom_suffix_template(self):
+        a = daily({"price": [1, 2, 3], "shared": [10, 20, 30]})
+        b = daily({"volume": [4, 5, 6], "shared": [40, 50, 60]})
+        result = fried_rice(a, b, heat=3, suffix_template="_src{i}")
+        assert "shared_src1" in result.columns
+
+    def test_default_suffix_unchanged_when_not_set(self):
+        a = daily({"shared": [10, 20, 30]})
+        b = daily({"shared": [40, 50, 60]})
+        result = fried_rice(a, b, heat=3)
+        assert "shared_1" in result.columns
+
+
+class TestTimezoneHandling:
+    def test_tz_aware_index_is_stripped_and_mergeable(self):
+        idx = pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")
+        a = pd.DataFrame({"price": [1, 2, 3]}, index=idx)
+        b = daily({"volume": [10, 20, 30]})
+        result = fried_rice(a, b)
+        assert result.index.tz is None
+        assert "volume" in result.columns

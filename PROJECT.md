@@ -116,9 +116,11 @@ def fried_rice(
     *dfs: pd.DataFrame,
     freq: str = "D",
     heat: int = 3,
+    join: str = "outer",
     fuzzy_columns: bool = False,
     fill_method: str = "ffill",
     date_col: str | list[str] | None = None,
+    suffix_template: str | None = None,
 ) -> pd.DataFrame
 ```
 
@@ -129,9 +131,15 @@ def fried_rice(
 | `*dfs` | — | Two or more DataFrames to blend |
 | `freq` | `"D"` | Target resampling frequency — any pandas offset alias (`"D"`, `"W"`, `"ME"`, `"QE"`, etc.) |
 | `heat` | `3` | Conflict resolution strategy when column names collide (see below) |
+| `join` | `"outer"` | Which rows survive: `"outer"` (union of all frames' timestamps), `"inner"` (intersection only), `"left"` (first frame's timestamps only) |
 | `fuzzy_columns` | `False` | Normalize column names before merging so `"Close"`, `"close"`, and `"closing_price"` are treated as the same column |
 | `fill_method` | `"ffill"` | How to fill gaps after resampling: `"ffill"`, `"bfill"`, or `"interpolate"` |
 | `date_col` | `None` | Override auto-detection — single string applied to all DataFrames, or a list with one entry per DataFrame |
+| `suffix_template` | `None` | Format string for heat=3 collision suffixes, receiving `{i}` (the 1-based frame position). Defaults to `"_{i}"` |
+
+Timezone-aware DatetimeIndex values are stripped to naive (`tz_localize(None)`)
+immediately after date detection, so mixing tz-aware and tz-naive inputs no
+longer crashes.
 
 **Heat levels (conflict resolution):**
 
@@ -154,7 +162,8 @@ def fried_rice(
 
 - `_detect_date_col(df)` — runs the auto-detection logic above
 - `_normalize(name)` — lowercases and collapses whitespace/hyphens/underscores for fuzzy matching
-- `_merge(frames, heat)` — dispatches to the correct merge strategy based on heat level
+- `_reindex_frames(frames, join)` — computes the target index for `join` and reindexes all prepared frames to it before merging
+- `_merge(frames, heat, suffix_template=None)` — dispatches to the correct merge strategy based on heat level
 
 **Processing pipeline per DataFrame:**
 
@@ -192,7 +201,13 @@ Normalizes and cleans raw DataFrames. Column names are standardized, string whit
 **Signature:**
 
 ```python
-def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
+def orange_chicken(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    rename: dict | None = None,
+    dtypes: dict | None = None,
+) -> pd.DataFrame
 ```
 
 **Parameters:**
@@ -201,6 +216,8 @@ def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
 |---|---|---|
 | `df` | — | Raw input DataFrame |
 | `heat` | `3` | Cleaning aggressiveness — each level is cumulative (includes all lower levels) |
+| `rename` | `None` | `{old: new}` column renames, applied after the heat-level cleaning steps |
+| `dtypes` | `None` | `{column: dtype}` passed to `.astype()`, applied last — keys refer to post-`rename` column names |
 
 **Heat levels (cumulative):**
 
@@ -233,6 +250,11 @@ def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
 - `_coerce_booleans(df)` — boolean coercion with ≥90% coverage threshold
 - `_drop_sparse(df, threshold)` — drop columns at or above null fraction
 
+**Not implemented:** an optional change-log return value (what was renamed,
+coerced, dropped) is still on the roadmap — it needs a return-shape decision
+(new field vs. a second return value vs. `return_log=True` changing the
+return type) that wasn't pinned down in this pass.
+
 **Example:**
 
 ```python
@@ -260,7 +282,13 @@ Returns a one-row-per-column statistical profile of any DataFrame. Numeric colum
 **Signature:**
 
 ```python
-def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
+def larb(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> pd.DataFrame
 ```
 
 **Parameters:**
@@ -269,6 +297,13 @@ def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
 |---|---|---|
 | `df` | — | DataFrame to profile |
 | `heat` | `3` | Outlier sensitivity — higher heat = tighter IQR fences = more outliers flagged |
+| `include` | `None` | Only profile these columns; applied before `exclude` |
+| `exclude` | `None` | Never profile these columns |
+
+**Not implemented:** the `plot=True` histogram option is still on the roadmap
+— it needs a design decision on the optional `matplotlib` dependency wiring
+and what the function returns when plotting (the profile DataFrame plus
+figures, or a side-effecting `plt.show()`), which wasn't pinned down here.
 
 **Heat → IQR multiplier mapping:**
 
@@ -379,7 +414,7 @@ A persistent disk-caching decorator. Wraps any callable and pickles its return v
 **Signature (decorator factory):**
 
 ```python
-@sticky_rice(ttl=3600, key=None, cache_dir=None)
+@sticky_rice(ttl=3600, key=None, cache_dir=None, compress=False)
 def my_fn(...): ...
 
 # Bare decorator (no options, uses all defaults)
@@ -394,11 +429,21 @@ def my_fn(...): ...
 | `ttl` | `3600` | Seconds before a cached entry expires. `0` = never expires |
 | `key` | `None` | Fixed cache key string. If omitted, key is `MD5(module.qualname:args:kwargs)` |
 | `cache_dir` | `None` | Cache directory. Defaults to `.thaitruck_cache/` in the working directory |
+| `compress` | `False` | Gzip cache files on write, and read them back through gzip |
 
 **Decorated function gains:**
 
-- `.clear()` — deletes all cache entries for this function (or the single fixed-key entry if `key=` was set)
+- `.clear()` — deletes all cache entries for this function (or the single fixed-key entry if `key=` was set); also resets `.stats()` counters
 - `.cache_dir` — `pathlib.Path` pointing to the cache directory
+- `.stats()` — returns `{"hits": int, "misses": int, "size_bytes": int}`. Hit/miss
+  counts are per-process (reset on restart, not persisted). When `key` is a
+  fixed string, `size_bytes` is that one file's size; otherwise it's the whole
+  `cache_dir` — content-hash keys have no recoverable link back to a single
+  function, the same limitation `.clear()` already has in that case
+
+**Not implemented:** a Redis backend (`backend="redis"`) is still on the
+roadmap — it needs an external dependency and connection-config design
+(host/port/auth) that wasn't pinned down here.
 
 **Cache storage format:**
 
@@ -452,6 +497,7 @@ def satay(df: pd.DataFrame, *skewers: Any) -> pd.DataFrame
 | `list[str]` | Multi-column selector — add all listed columns |
 | `slice` | Positional row slice via `iloc` |
 | `tuple(col, lo, hi)` | Range row filter — keep rows where `lo <= df[col] <= hi` |
+| `tuple(col, value, op)` | Comparison row filter — keep rows where `df[col] op value`. `op` is one of `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"!="`. Dispatch is by the third element's type: a recognized operator string selects this form, anything else falls back to the range form above |
 | `dict` | Equality or `isin` filter — `{col: value}` or `{col: [v1, v2]}` |
 | `callable` | Boolean mask filter — receives the current DataFrame, returns a bool mask |
 
@@ -460,6 +506,10 @@ def satay(df: pd.DataFrame, *skewers: Any) -> pd.DataFrame
 - All non-column skewers (row filters) are applied **in order** as they appear
 - String and list skewers (column selectors) are collected and applied **after all row filters**
 - Calling `satay(df)` with no skewers returns a copy of the DataFrame unchanged
+
+**Shorthand:** `satay.head(df, n=5)` and `satay.tail(df, n=5)` are attached
+directly to the `satay` function object — thin wrappers around
+`satay(df, slice(0, n))` / `satay(df, slice(-n, None))`.
 
 **Examples:**
 
@@ -470,9 +520,12 @@ satay(df, "price")                              # single column
 satay(df, ["price", "volume"])                  # multiple columns
 satay(df, slice(0, 100))                        # first 100 rows
 satay(df, ("price", 10.0, 50.0))               # price between 10 and 50
+satay(df, ("price", 100, ">"))                  # price > 100
 satay(df, {"sector": "Tech"})                   # equality filter
 satay(df, {"sector": ["Tech", "Energy"]})       # isin filter
 satay(df, lambda d: d["volume"] > 1_000_000)   # callable
+satay.head(df, 10)                              # first 10 rows
+satay.tail(df, 10)                              # last 10 rows
 
 # Compose freely — filters applied left to right, columns last
 satay(df, {"sector": "Tech"}, ("price", 10, 200), "price", "volume")
@@ -665,7 +718,10 @@ Registers `"truck"` as a pandas DataFrame accessor via
 import side effect — `import thaitruck` (or importing anything from it) is
 enough; no separate call is required. Wraps `orange_chicken`, `larb`, `satay`,
 `fried_rice`, `massaman`, and `nam_pla` — thin delegation, no separate
-implementation.
+implementation. Each wrapper method's signature mirrors its underlying
+function exactly (e.g. `df.truck.orange_chicken(heat=3, rename=..., dtypes=...)`,
+`df.truck.fried_rice(other_df, join="inner", ...)`), so a new parameter on the
+function requires a matching update here — there's no `**kwargs` passthrough.
 
 ```python
 import thaitruck
@@ -905,33 +961,40 @@ prik_nam_som(df, baseline=reference_df, thresholds={"row_drop_pct": 0.10})
 
 ### Priority 4: Enhancements to Existing Modules
 
+> **Mostly implemented (2026-09-09)** — see the Current Menu entries above for
+> each module's updated signature. What's done and what's still open, per
+> module:
+
 #### `fried_rice`
 
-- **`join` parameter** — add `join="outer"` (default), `"inner"`, `"left"` to control the merge join type
-- **`suffix_template` parameter** — let the caller control suffix format in heat=3 mode (e.g., `suffix_template="_{source}"`)
-- **Timezone-aware DatetimeIndex support** — currently can crash on tz-aware indexes; handle gracefully by stripping or aligning timezones
+- ✅ **`join` parameter** — `"outer"` (default), `"inner"`, `"left"`
+- ✅ **`suffix_template` parameter** — receives `{i}` (frame position), not
+  `{source}` as originally sketched — frames aren't named entities in this API
+- ✅ **Timezone-aware DatetimeIndex support** — tz is stripped automatically
 
 #### `orange_chicken`
 
-- **`rename` parameter** — dict of `old → new` column names applied after cleaning: `rename={"open_price": "price"}`
-- **`dtypes` parameter** — explicit dtype override dict applied after coercion: `dtypes={"price": "float32"}`
-- **Change log** — optionally return metadata describing what was renamed, coerced, and dropped (for audit/debugging)
+- ✅ **`rename` parameter** — applied after the heat-level cleaning steps
+- ✅ **`dtypes` parameter** — applied last, after `rename`
+- ⬜ **Change log** — still needs a return-shape decision, see the Current Menu note above
 
 #### `larb`
 
-- **`include` / `exclude` parameters** — filter which columns are profiled: `include=["price", "volume"]` or `exclude=["id"]`
-- **`plot` parameter** — render a quick histogram per numeric column using `matplotlib` (optional dependency); `plot=True`
+- ✅ **`include` / `exclude` parameters**
+- ⬜ **`plot` parameter** — still needs an optional-dependency + return-shape decision, see the Current Menu note above
 
 #### `sticky_rice`
 
-- **Redis backend** — add a `backend="redis"` option (with `redis-py` as an optional dependency) for shared caching across processes
-- **`.stats()` method** — expose hit/miss counts and cache size on disk
-- **`compress=True` option** — gzip pickle files for large result sets to reduce disk usage
+- ⬜ **Redis backend** — still needs external dependency + connection-config design, see the Current Menu note above
+- ✅ **`.stats()` method**
+- ✅ **`compress=True` option**
 
 #### `satay`
 
-- **`.head(n)` and `.tail(n)` shorthand** — `satay.head(df, 10)` as a convenience wrapper
-- **`(col, value, op)` tuple form** — alternative tuple syntax: `("price", 100, ">")` for comparison operators beyond range filtering
+- ✅ **`.head(n)` and `.tail(n)` shorthand**
+- ✅ **`(col, value, op)` tuple form** — disambiguated from `(col, lo, hi)` by
+  the third element's type: a recognized operator string picks the comparison
+  form, anything else falls back to the range form
 
 ---
 

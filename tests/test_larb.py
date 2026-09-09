@@ -140,3 +140,25 @@ class TestMixedDataFrame:
     def test_invalid_heat_raises(self):
         with pytest.raises(ValueError, match="heat must be 1–5"):
             larb(pd.DataFrame({"a": [1]}), heat=6)
+
+
+class TestIncludeExclude:
+    def test_include_limits_profiled_columns(self):
+        df = pd.DataFrame({"price": [1.0, 2.0], "volume": [10, 20], "id": [1, 2]})
+        result = larb(df, include=["price", "volume"])
+        assert set(result.index) == {"price", "volume"}
+
+    def test_exclude_drops_columns(self):
+        df = pd.DataFrame({"price": [1.0, 2.0], "id": [1, 2]})
+        result = larb(df, exclude=["id"])
+        assert set(result.index) == {"price"}
+
+    def test_include_and_exclude_combined(self):
+        df = pd.DataFrame({"price": [1.0], "volume": [10], "id": [1]})
+        result = larb(df, include=["price", "volume", "id"], exclude=["id"])
+        assert set(result.index) == {"price", "volume"}
+
+    def test_no_include_exclude_profiles_everything(self):
+        df = pd.DataFrame({"price": [1.0], "volume": [10]})
+        result = larb(df)
+        assert set(result.index) == {"price", "volume"}

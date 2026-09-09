@@ -1,5 +1,7 @@
 """larb — raw, fast aggregation stats on unprocessed data."""
 
+from typing import Optional
+
 import pandas as pd
 
 from thaitruck.exceptions import InvalidHeatLevel
@@ -7,7 +9,13 @@ from thaitruck.exceptions import InvalidHeatLevel
 _HEAT_IQR = {1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0}
 
 
-def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
+def larb(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    include: Optional[list[str]] = None,
+    exclude: Optional[list[str]] = None,
+) -> pd.DataFrame:
     """Return a quick statistical profile of a DataFrame.
 
     Each row in the result represents one column from the input. Numeric
@@ -21,6 +29,10 @@ def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
     heat:
         Outlier sensitivity via IQR multiplier.
         1 = IQR x3.0 (extreme outliers only) … 5 = IQR x1.0 (very sensitive).
+    include:
+        Only profile these columns. Applied before ``exclude``.
+    exclude:
+        Never profile these columns.
     """
     if heat not in _HEAT_IQR:
         raise InvalidHeatLevel(f"heat must be 1–5, got {heat}")
@@ -28,7 +40,11 @@ def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
     multiplier = _HEAT_IQR[heat]
     rows = []
 
-    for col in df.columns:
+    columns = [c for c in df.columns if c in include] if include is not None else list(df.columns)
+    if exclude is not None:
+        columns = [c for c in columns if c not in exclude]
+
+    for col in columns:
         s = df[col]
         nonnull = s.notna().sum()
         total = len(s)

@@ -140,3 +140,60 @@ class TestClear:
         fn.clear()
         fn(1)
         assert call_count == 2
+
+
+class TestStats:
+    def test_tracks_hits_and_misses(self, cache_dir):
+        @sticky_rice(cache_dir=cache_dir)
+        def fn(x):
+            return x
+
+        fn(1)  # miss
+        fn(1)  # hit
+        fn(2)  # miss
+        stats = fn.stats()
+        assert stats["hits"] == 1
+        assert stats["misses"] == 2
+
+    def test_size_bytes_nonzero_after_write(self, cache_dir):
+        @sticky_rice(cache_dir=cache_dir)
+        def fn(x):
+            return x * 100
+
+        fn(1)
+        assert fn.stats()["size_bytes"] > 0
+
+    def test_clear_resets_counts(self, cache_dir):
+        @sticky_rice(cache_dir=cache_dir)
+        def fn(x):
+            return x
+
+        fn(1)
+        fn(1)
+        fn.clear()
+        stats = fn.stats()
+        assert stats["hits"] == 0
+        assert stats["misses"] == 0
+
+
+class TestCompress:
+    def test_compressed_roundtrip(self, cache_dir):
+        @sticky_rice(cache_dir=cache_dir, compress=True)
+        def fn(x):
+            return x * 2
+
+        assert fn(5) == 10
+        assert fn(5) == 10  # served from compressed cache
+
+    def test_compressed_cache_hits(self, cache_dir):
+        call_count = 0
+
+        @sticky_rice(cache_dir=cache_dir, compress=True)
+        def fn(x):
+            nonlocal call_count
+            call_count += 1
+            return x
+
+        fn(1)
+        fn(1)
+        assert call_count == 1

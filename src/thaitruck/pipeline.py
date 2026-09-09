@@ -31,17 +31,25 @@ class TruckPipeline:
     def __init__(self, df: pd.DataFrame) -> None:
         self._df = df
 
-    def orange_chicken(self, heat: int = 3) -> "TruckPipeline":
-        return TruckPipeline(orange_chicken(self._df, heat=heat))
+    def orange_chicken(
+        self,
+        heat: int = 3,
+        *,
+        rename: Optional[dict] = None,
+        dtypes: Optional[dict] = None,
+    ) -> "TruckPipeline":
+        return TruckPipeline(orange_chicken(self._df, heat=heat, rename=rename, dtypes=dtypes))
 
     def fried_rice(
         self,
         *dfs: pd.DataFrame,
         freq: str = "D",
         heat: int = 3,
+        join: str = "outer",
         fuzzy_columns: bool = False,
         fill_method: str = "ffill",
         date_col: Optional[Union[str, list[str]]] = None,
+        suffix_template: Optional[str] = None,
     ) -> "TruckPipeline":
         return TruckPipeline(
             fried_rice(
@@ -49,9 +57,11 @@ class TruckPipeline:
                 *dfs,
                 freq=freq,
                 heat=heat,
+                join=join,
                 fuzzy_columns=fuzzy_columns,
                 fill_method=fill_method,
                 date_col=date_col,
+                suffix_template=suffix_template,
             )
         )
 

@@ -37,6 +37,24 @@ class TestAccessorMethods:
         result = df.truck.massaman("price", window=3, ops=["mean"])
         assert "price_roll_mean_3" in result.columns
 
+    def test_orange_chicken_rename_dtypes(self):
+        df = pd.DataFrame({"Price": ["1.5"]})
+        result = df.truck.orange_chicken(heat=1, rename={"price": "p"}, dtypes={"p": "float64"})
+        assert result["p"].dtype == "float64"
+
+    def test_larb_include_exclude(self):
+        df = pd.DataFrame({"price": [1.0], "id": [1]})
+        result = df.truck.larb(exclude=["id"])
+        assert set(result.index) == {"price"}
+
+    def test_fried_rice_join(self):
+        idx_a = pd.date_range("2024-01-01", periods=3, freq="D")
+        idx_b = pd.date_range("2024-01-02", periods=3, freq="D")
+        a = pd.DataFrame({"price": [1.0, 2.0, 3.0]}, index=idx_a)
+        b = pd.DataFrame({"volume": [10, 20, 30]}, index=idx_b)
+        result = a.truck.fried_rice(b, join="left")
+        assert len(result) == 3
+
     def test_nam_pla(self):
         df = pd.DataFrame({"price": [-5.0, 10.0]})
         result = df.truck.nam_pla({"price": {"min": 0}})

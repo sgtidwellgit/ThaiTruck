@@ -57,6 +57,30 @@ class TestTupleRangeFilter:
             satay(df, ("price", 10))
 
 
+class TestTupleComparisonOp:
+    def test_greater_than(self, df):
+        result = satay(df, ("price", 15.0, ">"))
+        assert all(p > 15.0 for p in result["price"])
+
+    def test_less_than_or_equal(self, df):
+        result = satay(df, ("price", 15.0, "<="))
+        assert all(p <= 15.0 for p in result["price"])
+
+    def test_equality_op(self, df):
+        result = satay(df, ("price", 10.0, "=="))
+        assert len(result) == 1
+        assert result.iloc[0]["name"] == "Alice"
+
+    def test_not_equal_op(self, df):
+        result = satay(df, ("price", 10.0, "!="))
+        assert 10.0 not in result["price"].values
+
+    def test_third_element_non_operator_string_falls_back_to_range(self):
+        df2 = pd.DataFrame({"label": ["a", "m", "z"]})
+        result = satay(df2, ("label", "a", "z"))
+        assert len(result) == 3
+
+
 class TestDictFilter:
     def test_equality_filter(self, df):
         result = satay(df, {"sector": "Tech"})
@@ -100,3 +124,17 @@ class TestCombined:
     def test_invalid_skewer_type_raises(self, df):
         with pytest.raises(TypeError, match="Unrecognised skewer"):
             satay(df, 42)
+
+
+class TestHeadTailShorthand:
+    def test_head_default(self, df):
+        result = satay.head(df)
+        assert len(result) == 5  # fixture has exactly 5 rows, default n=5
+
+    def test_head_n(self, df):
+        result = satay.head(df, 2)
+        assert list(result["name"]) == ["Alice", "Bob"]
+
+    def test_tail_n(self, df):
+        result = satay.tail(df, 2)
+        assert list(result["name"]) == ["Dave", "Eve"]

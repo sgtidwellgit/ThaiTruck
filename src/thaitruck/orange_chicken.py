@@ -1,6 +1,7 @@
 """orange_chicken — normalize and transform raw data into clean, uniform output."""
 
 import re
+from typing import Optional
 
 import pandas as pd
 
@@ -52,7 +53,13 @@ def _drop_sparse(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     return df.drop(columns=null_frac[null_frac >= threshold].index.tolist())
 
 
-def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
+def orange_chicken(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    rename: Optional[dict] = None,
+    dtypes: Optional[dict] = None,
+) -> pd.DataFrame:
     """Glaze a raw DataFrame into clean, uniform output.
 
     Each heat level is cumulative — higher heat includes all lower-heat steps.
@@ -68,6 +75,12 @@ def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
         3 = + coerce numeric strings to numbers (default).
         4 = + coerce boolean strings, drop columns with >90% nulls.
         5 = + drop columns with >50% nulls (napalm).
+    rename:
+        Dict of ``{old_name: new_name}`` applied after the heat-level cleaning
+        steps, using the already-normalized column names.
+    dtypes:
+        Dict of ``{column: dtype}`` passed to ``.astype()``, applied last (after
+        ``rename``, so keys refer to the final column names).
     """
     if heat < 1 or heat > 5:
         raise InvalidHeatLevel(f"heat must be 1–5, got {heat}")
@@ -91,5 +104,11 @@ def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame:
 
     if heat >= 5:
         df = _drop_sparse(df, threshold=0.5)
+
+    if rename:
+        df = df.rename(columns=rename)
+
+    if dtypes:
+        df = df.astype(dtypes)
 
     return df

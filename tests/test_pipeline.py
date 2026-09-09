@@ -34,6 +34,23 @@ class TestChaining:
         assert "price" in result.columns
         assert "volume" in result.columns
 
+    def test_orange_chicken_rename_dtypes_in_chain(self):
+        raw = pd.DataFrame({"Open Price": ["1.5", "2.5"]})
+        result = (
+            TruckPipeline(raw)
+            .orange_chicken(heat=1, rename={"open_price": "price"}, dtypes={"price": "float64"})
+            .result()
+        )
+        assert result["price"].dtype == "float64"
+
+    def test_fried_rice_join_in_chain(self):
+        idx_a = pd.date_range("2024-01-01", periods=3, freq="D")
+        idx_b = pd.date_range("2024-01-02", periods=3, freq="D")
+        a = pd.DataFrame({"price": [1.0, 2.0, 3.0]}, index=idx_a)
+        b = pd.DataFrame({"volume": [10, 20, 30]}, index=idx_b)
+        result = TruckPipeline(a).fried_rice(b, join="inner").result()
+        assert len(result) == 2
+
     def test_massaman_in_chain(self):
         df = pd.DataFrame({"price": [float(i) for i in range(1, 11)]})
         result = TruckPipeline(df).massaman("price", window=3, ops=["mean"]).result()

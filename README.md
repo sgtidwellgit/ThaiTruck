@@ -56,9 +56,11 @@ result = fried_rice(prices_df, earnings_df, macro_df, freq="D")
 | `*dfs` | — | Two or more DataFrames |
 | `freq` | `"D"` | Target frequency (`"D"`, `"W"`, `"ME"`, `"QE"`, …) |
 | `heat` | `3` | Conflict resolution — see Heat Guide below |
+| `join` | `"outer"` | Which rows survive: `"outer"` (union), `"inner"` (overlap only), `"left"` (first frame's timestamps) |
 | `fuzzy_columns` | `False` | Normalize column names before merging |
 | `fill_method` | `"ffill"` | `"ffill"`, `"bfill"`, or `"interpolate"` |
 | `date_col` | `None` | Override auto-detection |
+| `suffix_template` | `None` | Format string for heat=3 collision suffixes, e.g. `"_src{i}"` — defaults to `"_{i}"` |
 
 ```python
 # Quarterly earnings merged into a daily price series
@@ -75,6 +77,9 @@ result = fried_rice(
 ThaiTruck auto-detects columns named `date`, `ts`, `timestamp`, `report_date`,
 `trade_date`, `as_of_date`, and more. If your column has a truly cursed name,
 pass `date_col="your_cursed_name"`.
+
+Timezone-aware DatetimeIndex values are automatically stripped to naive
+timestamps so they merge cleanly with everything else.
 
 ---
 
@@ -114,6 +119,17 @@ clean = orange_chicken(raw, heat=4)
 # columns: open_price (float), active (bool)
 ```
 
+Rename columns or lock in dtypes after cleaning, without a second pass:
+
+```python
+clean = orange_chicken(
+    raw_df,
+    heat=3,
+    rename={"open_price": "price"},   # applied after cleaning
+    dtypes={"price": "float32"},      # applied last, using the renamed columns
+)
+```
+
 ---
 
 ### `larb` — The Raw Bar
@@ -148,6 +164,13 @@ volume   int64      365      0.0  1.02M   480K      10K  700K   980K    1.3M    
 | 5 | × 1.0 | Very sensitive — expects tightly clustered data |
 
 Non-numeric columns get `unique`, `top`, and `top_freq` instead of numeric stats.
+
+Profile a subset of columns with `include`/`exclude`:
+
+```python
+larb(df, include=["price", "volume"])  # only these two
+larb(df, exclude=["id"])               # everything except id
+```
 
 ---
 
@@ -203,9 +226,17 @@ fetch_and_merge.clear()
 @sticky_rice(
     ttl=1800,                    # seconds before expiry (0 = never)
     key="my_fixed_key",          # fixed key instead of hash
-    cache_dir=Path("/tmp/cache") # custom cache directory
+    cache_dir=Path("/tmp/cache"),# custom cache directory
+    compress=True,                # gzip cache files on disk
 )
 def my_fn(): ...
+```
+
+Check hit/miss counts and on-disk size:
+
+```python
+fetch_and_merge.stats()
+# {"hits": 4, "misses": 1, "size_bytes": 20480}
 ```
 
 ---
@@ -230,6 +261,9 @@ satay(df, slice(0, 100))
 # Range filter
 satay(df, ("price", 10.0, 50.0))
 
+# Comparison filter — (col, value, op), op in > < >= <= == !=
+satay(df, ("price", 100, ">"))
+
 # Equality / isin filter
 satay(df, {"sector": "Tech"})
 satay(df, {"sector": ["Tech", "Energy"]})
@@ -239,6 +273,10 @@ satay(df, lambda d: d["volume"] > 1_000_000)
 
 # Mix and match — filters applied left to right
 satay(df, {"sector": "Tech"}, ("price", 10, 200), "price", "volume")
+
+# head/tail shorthand
+satay.head(df, 10)
+satay.tail(df, 10)
 ```
 
 ---

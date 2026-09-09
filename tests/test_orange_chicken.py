@@ -141,3 +141,30 @@ class TestEdgeCases:
         original_col = list(df.columns)
         orange_chicken(df, heat=3)
         assert list(df.columns) == original_col
+
+
+class TestRename:
+    def test_renames_after_cleaning(self):
+        df = pd.DataFrame({"Open Price": [1.0, 2.0]})
+        result = orange_chicken(df, heat=1, rename={"open_price": "price"})
+        assert "price" in result.columns
+        assert "open_price" not in result.columns
+
+    def test_no_rename_when_not_given(self):
+        df = pd.DataFrame({"Price": [1.0]})
+        result = orange_chicken(df, heat=1)
+        assert "price" in result.columns
+
+
+class TestDtypes:
+    def test_applies_dtype_override(self):
+        df = pd.DataFrame({"price": ["1", "2", "3"]})
+        result = orange_chicken(df, heat=1, dtypes={"price": "int64"})
+        assert result["price"].dtype == "int64"
+
+    def test_dtypes_applied_after_rename(self):
+        df = pd.DataFrame({"Open Price": ["1.5", "2.5"]})
+        result = orange_chicken(
+            df, heat=1, rename={"open_price": "price"}, dtypes={"price": "float64"}
+        )
+        assert result["price"].dtype == "float64"

@@ -192,22 +192,37 @@ def fried_rice(
     *dfs: pd.DataFrame,
     freq: str = "D",
     heat: int = 3,
+    join: str = "outer",       # "outer" | "inner" | "left"
     fuzzy_columns: bool = False,
     fill_method: str = "ffill",
     date_col: str | list[str] | None = None,
+    suffix_template: str | None = None,   # e.g. "_src{i}"; defaults to "_{i}"
 ) -> pd.DataFrame
 ```
 
 Internal helpers (not public):
 - `_detect_date_col(df)` — name-hint + dtype heuristic
 - `_normalize(name)` — fuzzy column name normalisation
-- `_merge(frames, heat)` — heat-dispatched merge strategy
+- `_reindex_frames(frames, join)` — computes the `join`-based target index and reindexes all frames to it before merging
+- `_merge(frames, heat, suffix_template=None)` — heat-dispatched merge strategy
+
+Timezone-aware indices are stripped to naive via `tz_localize(None)`
+immediately after date detection.
 
 ### `orange_chicken`
 
 ```python
-def orange_chicken(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
+def orange_chicken(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    rename: dict | None = None,
+    dtypes: dict | None = None,
+) -> pd.DataFrame
 ```
+
+`rename` is applied after the heat-level cleaning steps; `dtypes` (`.astype()`)
+is applied last, so its keys refer to post-`rename` column names.
 
 Internal helpers (not public):
 - `_clean_col_name(name)` — lowercase, underscores, strip specials
@@ -219,11 +234,19 @@ Internal helpers (not public):
 ### `larb`
 
 ```python
-def larb(df: pd.DataFrame, heat: int = 3) -> pd.DataFrame
+def larb(
+    df: pd.DataFrame,
+    heat: int = 3,
+    *,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> pd.DataFrame
 ```
 
 Returns a profile DataFrame indexed by column name. Numeric columns get
 full stats + IQR outlier fences. Non-numeric columns get cardinality stats.
+`include` restricts to those columns (order from `df.columns`, not `include`);
+`exclude` is applied after `include`.
 
 Heat → IQR multiplier mapping: `{1: 3.0, 2: 2.5, 3: 2.0, 4: 1.5, 5: 1.0}`
 
@@ -243,7 +266,7 @@ def pad_thai(
 
 ```python
 # Decorator factory (recommended)
-@sticky_rice(ttl=3600, key=None, cache_dir=None)
+@sticky_rice(ttl=3600, key=None, cache_dir=None, compress=False)
 def my_fn(...): ...
 
 # Bare decorator (no options)
@@ -251,13 +274,18 @@ def my_fn(...): ...
 def my_fn(...): ...
 ```
 
-Decorated functions gain a `.clear()` method and a `.cache_dir` attribute.
-Cache files are stored as `<md5_hash>.pkl` under `.thaitruck_cache/` by default.
+Decorated functions gain `.clear()`, `.cache_dir`, and `.stats()` (returns
+`{"hits", "misses", "size_bytes"}`; counts are in-process only, not persisted).
+Cache files are stored as `<md5_hash>.pkl` under `.thaitruck_cache/` by
+default, gzip-compressed when `compress=True`.
 
 ### `satay`
 
 ```python
 def satay(df: pd.DataFrame, *skewers: Any) -> pd.DataFrame
+
+satay.head(df: pd.DataFrame, n: int = 5) -> pd.DataFrame
+satay.tail(df: pd.DataFrame, n: int = 5) -> pd.DataFrame
 ```
 
 Skewer dispatch table:
@@ -268,11 +296,13 @@ Skewer dispatch table:
 | `list[str]` | Multi-column selector |
 | `slice` | Positional row slice via `iloc` |
 | `tuple(col, lo, hi)` | Range row filter |
+| `tuple(col, value, op)` | Comparison row filter (`op` in `> < >= <= == !=`); dispatched by the third element being a recognized operator string, else falls back to the range form above |
 | `dict` | Equality / isin row filter |
 | `callable` | Boolean mask row filter |
 
 Column selectors are collected and applied last; all other skewers are
-row filters applied left to right.
+row filters applied left to right. `_COMPARISON_OPS` maps operator strings to
+`operator` module functions.
 
 ### `tom_kha`
 
@@ -345,12 +375,17 @@ TypeError` call sites keep working.
 ```python
 class TruckPipeline:
     def __init__(self, df: pd.DataFrame) -> None: ...
-    def orange_chicken(self, heat: int = 3) -> "TruckPipeline": ...
-    def fried_rice(self, *dfs, **kwargs) -> "TruckPipeline": ...
+    def orange_chicken(self, heat: int = 3, *, rename=None, dtypes=None) -> "TruckPipeline": ...
+    def fried_rice(self, *dfs, join: str = "outer", suffix_template=None, **kwargs) -> "TruckPipeline": ...
     def satay(self, *skewers) -> "TruckPipeline": ...
     def massaman(self, column: str, *, window: int = 20, ops=None) -> "TruckPipeline": ...
     def result(self) -> pd.DataFrame: ...
 ```
+
+`fried_rice` and `orange_chicken` here list explicit parameters mirroring the
+underlying function exactly (no `**kwargs` passthrough in the real code) — a
+new parameter on the function requires a matching update in both `pipeline.py`
+and `accessor.py`, or it silently isn't reachable through them.
 
 Each chain method returns a new `TruckPipeline` wrapping the transformed
 DataFrame; `.result()` unwraps it. `larb` is intentionally not a chain method
@@ -362,10 +397,10 @@ DataFrame; `.result()` unwraps it. `larb` is intentionally not a chain method
 @pd.api.extensions.register_dataframe_accessor("truck")
 class TruckAccessor:
     def __init__(self, pandas_obj: pd.DataFrame) -> None: ...
-    def orange_chicken(self, heat: int = 3) -> pd.DataFrame: ...
-    def larb(self, heat: int = 3) -> pd.DataFrame: ...
+    def orange_chicken(self, heat: int = 3, *, rename=None, dtypes=None) -> pd.DataFrame: ...
+    def larb(self, heat: int = 3, *, include=None, exclude=None) -> pd.DataFrame: ...
     def satay(self, *skewers) -> pd.DataFrame: ...
-    def fried_rice(self, *dfs, **kwargs) -> pd.DataFrame: ...
+    def fried_rice(self, *dfs, join: str = "outer", suffix_template=None, **kwargs) -> pd.DataFrame: ...
     def massaman(self, column: str, *, window: int = 20, ops=None) -> pd.DataFrame: ...
     def nam_pla(self, spec: dict, *, strict: bool = False) -> pd.DataFrame: ...
 ```
