@@ -12,6 +12,7 @@ import pandas as pd
 from thaitruck.fried_rice import fried_rice
 from thaitruck.larb import larb
 from thaitruck.massaman import massaman
+from thaitruck.nam_pla import nam_pla
 from thaitruck.orange_chicken import orange_chicken
 from thaitruck.satay import satay
 
@@ -59,3 +60,11 @@ class TruckAccessor:
         ops: Optional[list[str]] = None,
     ) -> pd.DataFrame:
         return massaman(self._df, column, window=window, ops=ops)
+
+    def nam_pla(
+        self,
+        spec: dict,
+        *,
+        strict: bool = False,
+    ) -> pd.DataFrame:
+        return nam_pla(self._df, spec, strict=strict)

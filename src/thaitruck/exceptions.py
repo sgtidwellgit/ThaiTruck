@@ -15,3 +15,7 @@ class InvalidHeatLevel(ThaiTruckError, ValueError):
 
 class SkewTypeError(ThaiTruckError, TypeError):
     """Raised when satay receives an unrecognised skewer type."""
+
+
+class ValidationError(ThaiTruckError, ValueError):
+    """Raised by nam_pla in strict mode when a DataFrame fails its schema spec."""

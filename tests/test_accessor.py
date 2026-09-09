@@ -37,6 +37,11 @@ class TestAccessorMethods:
         result = df.truck.massaman("price", window=3, ops=["mean"])
         assert "price_roll_mean_3" in result.columns
 
+    def test_nam_pla(self):
+        df = pd.DataFrame({"price": [-5.0, 10.0]})
+        result = df.truck.nam_pla({"price": {"min": 0}})
+        assert (result["check"] == "min").any()
+
     def test_does_not_mutate_original(self):
         df = pd.DataFrame({"Price": ["1.5"]})
         original_cols = list(df.columns)

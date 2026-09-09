@@ -291,6 +291,31 @@ row-over-row percent change.
 
 ---
 
+### `nam_pla` — The Dipping Sauce
+
+*Schema validation — catch bad data before it hits the pan.*
+
+Define what each column should look like; `nam_pla` returns a report of what
+violates the spec. Nothing raises by default, so it's safe to run in a
+pipeline as a checkpoint — pass `strict=True` when you want it to blow up.
+
+```python
+from thaitruck import nam_pla
+
+spec = {
+    "price":  {"dtype": float, "min": 0, "nullable": False},
+    "sector": {"dtype": str, "nullable": False, "isin": ["Tech", "Energy", "Health"]},
+}
+
+report = nam_pla(df, spec)          # returns a violations DataFrame (empty if clean)
+nam_pla(df, spec, strict=True)      # raises ValidationError if not clean
+```
+
+**Constraint keys:** `dtype`, `nullable`, `min`, `max`, `isin`, `required`
+(set `required=False` on a column that's only checked when present).
+
+---
+
 ## The Heat Guide
 
 Most ThaiTruck functions accept a `heat` parameter (1–5). The metaphor is
@@ -352,7 +377,13 @@ Every raise that used to be a bare `ValueError`/`TypeError` for a package-specif
 condition is now also a `ThaiTruckError`, so you can catch broadly or narrowly:
 
 ```python
-from thaitruck import ThaiTruckError, DateColumnNotFound, InvalidHeatLevel, SkewTypeError
+from thaitruck import (
+    ThaiTruckError,
+    DateColumnNotFound,
+    InvalidHeatLevel,
+    SkewTypeError,
+    ValidationError,
+)
 
 try:
     fried_rice(df_without_a_date_column)
@@ -366,9 +397,10 @@ except ThaiTruckError:
     ...
 ```
 
-Each is still a subclass of the exception type it replaces (`DateColumnNotFound`
-and `InvalidHeatLevel` are `ValueError`s, `SkewTypeError` is a `TypeError`), so
-existing `except ValueError` / `except TypeError` code keeps working unchanged.
+Each is still a subclass of the exception type it replaces (`DateColumnNotFound`,
+`InvalidHeatLevel`, and `ValidationError` are `ValueError`s, `SkewTypeError` is
+a `TypeError`), so existing `except ValueError` / `except TypeError` code keeps
+working unchanged.
 
 ---
 
@@ -383,6 +415,7 @@ from thaitruck import sticky_rice    # persistent disk caching
 from thaitruck import satay          # expressive DataFrame slicing
 from thaitruck import tom_kha        # deep config dict merging
 from thaitruck import massaman       # rolling aggregations and percentage change
+from thaitruck import nam_pla        # schema validation
 from thaitruck import TruckPipeline  # fluent chained pipeline
 ```
 

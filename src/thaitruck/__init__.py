@@ -8,12 +8,14 @@ from thaitruck.sticky_rice import sticky_rice
 from thaitruck.satay import satay
 from thaitruck.tom_kha import tom_kha
 from thaitruck.massaman import massaman
+from thaitruck.nam_pla import nam_pla
 from thaitruck.pipeline import TruckPipeline
 from thaitruck.exceptions import (
     ThaiTruckError,
     DateColumnNotFound,
     InvalidHeatLevel,
     SkewTypeError,
+    ValidationError,
 )
 from thaitruck import accessor  # noqa: F401  registers the `.truck` DataFrame accessor
 
@@ -28,9 +30,11 @@ __all__ = [
     "satay",
     "tom_kha",
     "massaman",
+    "nam_pla",
     "TruckPipeline",
     "ThaiTruckError",
     "DateColumnNotFound",
     "InvalidHeatLevel",
     "SkewTypeError",
+    "ValidationError",
 ]

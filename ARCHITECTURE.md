@@ -25,6 +25,7 @@ ThaiTruck/
 │       ├── satay.py            # expressive DataFrame slicing
 │       ├── tom_kha.py          # deep config dict merging
 │       ├── massaman.py         # rolling aggregations and percentage change
+│       ├── nam_pla.py          # schema validation
 │       ├── exceptions.py       # ThaiTruckError hierarchy (shared leaf module)
 │       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
 │       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
@@ -37,6 +38,7 @@ ThaiTruck/
     ├── test_satay.py
     ├── test_tom_kha.py
     ├── test_massaman.py
+    ├── test_nam_pla.py
     ├── test_exceptions.py
     ├── test_pipeline.py
     └── test_accessor.py
@@ -46,17 +48,18 @@ ThaiTruck/
 
 ## Module Dependency Map
 
-The 8 utility modules (`fried_rice`, `orange_chicken`, `larb`, `pad_thai`,
-`sticky_rice`, `satay`, `tom_kha`, `massaman`) are **independent of each
-other** — none imports another utility module. All external dependencies flow
-in from `pandas` and `numpy` only. `sticky_rice` and `tom_kha` use stdlib only.
+The 9 utility modules (`fried_rice`, `orange_chicken`, `larb`, `pad_thai`,
+`sticky_rice`, `satay`, `tom_kha`, `massaman`, `nam_pla`) are **independent of
+each other** — none imports another utility module. All external dependencies
+flow in from `pandas` and `numpy` only. `sticky_rice` and `tom_kha` use stdlib
+only.
 
 Two exceptions to "independent," both intentional:
 
 - **`exceptions`** is a shared, dependency-free leaf module. `fried_rice`,
-  `orange_chicken`, `larb`, and `satay` import it for their error types. This
-  doesn't break utility-module independence — none of them import *each
-  other*, they all import the same leaf.
+  `orange_chicken`, `larb`, `satay`, and `nam_pla` import it for their error
+  types. This doesn't break utility-module independence — none of them import
+  *each other*, they all import the same leaf.
 - **`pipeline`** and **`accessor`** are a composition layer, not utility
   modules. Like `__init__.py`, their entire job is to call the utility
   modules, so they depend on several of them by design.
@@ -72,6 +75,7 @@ graph TD
         ST[satay]
         TK[tom_kha]
         MM[massaman]
+        NP_[nam_pla]
         EX[exceptions]
         PIPE[pipeline]
         ACC[accessor]
@@ -92,6 +96,7 @@ graph TD
     INIT --> ST
     INIT --> TK
     INIT --> MM
+    INIT --> NP_
     INIT --> EX
     INIT --> PIPE
     INIT --> ACC
@@ -108,6 +113,9 @@ graph TD
     ST --> PD
     ST --> EX
     MM --> PD
+    NP_ --> PD
+    NP_ --> NP
+    NP_ --> EX
 
     PIPE --> FR
     PIPE --> OC
@@ -119,6 +127,7 @@ graph TD
     ACC --> LB
     ACC --> ST
     ACC --> MM
+    ACC --> NP_
 ```
 
 ---
@@ -147,6 +156,7 @@ graph TD
         LB[larb<br/>profile · outliers]
         ST[satay<br/>slice · filter · select]
         MM[massaman<br/>rolling · pct_change]
+        NP_[nam_pla<br/>schema validation]
     end
 
     subgraph String Utilities
@@ -160,12 +170,12 @@ graph TD
     end
 
     INIT --> PIPE & ACC
-    INIT --> FR & OC & LB & ST & MM
+    INIT --> FR & OC & LB & ST & MM & NP_
     INIT --> PT
     INIT --> SR & TK & EX
 
     PIPE --> FR & OC & ST & MM
-    ACC --> FR & OC & LB & ST & MM
+    ACC --> FR & OC & LB & ST & MM & NP_
 ```
 
 ---
@@ -294,6 +304,28 @@ Adds `{column}_roll_{op}_{window}` for windowed ops (`mean`, `std`, `sum`,
 `pct_change` op. Raises `KeyError` for a missing column, `ValueError` for an
 unrecognized op.
 
+### `nam_pla`
+
+```python
+def nam_pla(
+    df: pd.DataFrame,
+    spec: dict[str, dict[str, Any]],
+    *,
+    strict: bool = False,
+) -> pd.DataFrame
+```
+
+Per-column constraint keys: `dtype`, `nullable`, `min`, `max`, `isin`,
+`required`. Returns a `column`/`check`/`message` violations DataFrame (empty
+when clean). `strict=True` raises `ValidationError` instead of just returning
+the report. An unrecognized constraint key raises `ValueError` immediately.
+`nam_prik` was folded into this module rather than built separately — same
+spec shape, `strict=True` covers the fast-fail use case.
+
+Internal helpers (not public):
+- `_check_dtype(series, expected)` — dtype compatibility check
+- `_DTYPE_CHECKS` — maps `float`/`int`/`str`/`bool` to a pandas dtype predicate
+
 ### `exceptions`
 
 ```python
@@ -301,6 +333,7 @@ class ThaiTruckError(Exception): ...
 class DateColumnNotFound(ThaiTruckError, ValueError): ...
 class InvalidHeatLevel(ThaiTruckError, ValueError): ...
 class SkewTypeError(ThaiTruckError, TypeError): ...
+class ValidationError(ThaiTruckError, ValueError): ...
 ```
 
 Dependency-free leaf module. Each concrete exception also inherits the
@@ -334,6 +367,7 @@ class TruckAccessor:
     def satay(self, *skewers) -> pd.DataFrame: ...
     def fried_rice(self, *dfs, **kwargs) -> pd.DataFrame: ...
     def massaman(self, column: str, *, window: int = 20, ops=None) -> pd.DataFrame: ...
+    def nam_pla(self, spec: dict, *, strict: bool = False) -> pd.DataFrame: ...
 ```
 
 Registration happens as an import side effect in `thaitruck/__init__.py`
@@ -355,9 +389,11 @@ This is a package-wide convention, not an enforced interface.
 
 ### Input / Output Types
 
-DataFrame modules (`fried_rice`, `orange_chicken`, `larb`, `satay`) always
-accept `pd.DataFrame` and always return `pd.DataFrame`. None mutate their
-input — all operate on a `.copy()`.
+DataFrame modules (`fried_rice`, `orange_chicken`, `larb`, `satay`, `massaman`)
+always accept `pd.DataFrame` and always return `pd.DataFrame`. None mutate
+their input — all operate on a `.copy()`. `nam_pla` also accepts a
+`pd.DataFrame` but returns a violations report DataFrame rather than a
+transformed version of the input (same shape of exception as `larb`).
 
 `pad_thai` mirrors its input type: `str → str`, `list → list`,
 `pd.Series → pd.Series`.

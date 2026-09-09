@@ -8,7 +8,7 @@
 
 1. [What ThaiTruck Is](#what-thaitruck-is)
 2. [Repository Layout](#repository-layout)
-3. [Current Menu — All 8 Modules](#current-menu--all-8-modules)
+3. [Current Menu — All 9 Modules](#current-menu--all-9-modules)
 4. [The Heat Guide](#the-heat-guide)
 5. [Architecture](#architecture)
 6. [Tests](#tests)
@@ -38,7 +38,7 @@ The flagship use-case is data engineering work that involves multiple DataFrames
 pip install thaitruck
 ```
 
-The library currently exports **8 functions plus the `TruckPipeline` fluent
+The library currently exports **9 functions plus the `TruckPipeline` fluent
 wrapper**, all accessible from the top-level namespace:
 
 ```python
@@ -50,6 +50,7 @@ from thaitruck import sticky_rice     # persistent disk caching
 from thaitruck import satay           # expressive DataFrame slicing
 from thaitruck import tom_kha         # deep config dict merging
 from thaitruck import massaman        # rolling aggregations and percentage change
+from thaitruck import nam_pla         # schema validation
 from thaitruck import TruckPipeline   # fluent chained pipeline
 ```
 
@@ -77,6 +78,7 @@ ThaiTruck/
 │       ├── satay.py            # expressive DataFrame slicing
 │       ├── tom_kha.py          # deep config dict merging
 │       ├── massaman.py         # rolling aggregations and percentage change
+│       ├── nam_pla.py          # schema validation
 │       ├── exceptions.py       # ThaiTruckError hierarchy (shared, leaf module)
 │       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
 │       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
@@ -89,6 +91,7 @@ ThaiTruck/
     ├── test_satay.py
     ├── test_tom_kha.py
     ├── test_massaman.py
+    ├── test_nam_pla.py
     ├── test_exceptions.py
     ├── test_pipeline.py
     └── test_accessor.py
@@ -96,7 +99,7 @@ ThaiTruck/
 
 ---
 
-## Current Menu — All 8 Modules
+## Current Menu — All 9 Modules
 
 ---
 
@@ -585,9 +588,73 @@ result = massaman(df, "price", window=20, ops=["mean", "std", "pct_change"])
 
 ---
 
+### `nam_pla` — Schema Validation
+
+**File:** `src/thaitruck/nam_pla.py`
+
+**Scope decision (locked in 2026-09-09):** `nam_pla` and `nam_prik` were
+originally drafted as a heavy/light validator pair. They were merged into one
+`nam_pla` — the schema spec shape is identical either way, and two modules with
+near-identical signatures was a discoverability tax without a real functional
+split. `strict=True` covers the "fast fail-fast in a script" use case that
+`nam_prik` was meant for.
+
+**Signature:**
+
+```python
+def nam_pla(
+    df: pd.DataFrame,
+    spec: dict[str, dict[str, Any]],
+    *,
+    strict: bool = False,
+) -> pd.DataFrame
+```
+
+**Constraint keys** (per column, all optional):
+
+| Key | Description |
+|---|---|
+| `dtype` | `float`/`int`/`str`/`bool`, or anything `numpy.dtype()` accepts. `float` accepts any numeric dtype (int or float); the others are exact. |
+| `nullable` | Default `True`. If `False`, any null fails. |
+| `min` / `max` | Numeric bounds, inclusive. |
+| `isin` | Iterable of allowed values. |
+| `required` | Default `True`. If `False`, the column is only checked when present instead of being reported as missing. |
+
+**Current behavior:**
+
+- Returns a violations DataFrame (`column`, `check`, `message`) — empty (but
+  same columns) when the DataFrame is clean. Nothing raises by default, so it's
+  safe as a pipeline checkpoint.
+- `strict=True` raises `ValidationError` (see Exceptions below) when the report
+  is non-empty, with the report rendered in the message.
+- An unrecognized constraint key raises `ValueError` immediately — catches typos
+  in the spec itself rather than silently ignoring them.
+- Never mutates the input.
+- Excluded from `TruckPipeline` for the same reason as `larb`: it returns a
+  report, not a transformed version of the input. Available via the accessor
+  (`df.truck.nam_pla(spec)`) since the accessor isn't chain-shaped.
+
+**Example:**
+
+```python
+from thaitruck import nam_pla
+
+spec = {
+    "price":  {"dtype": float, "min": 0, "nullable": False},
+    "sector": {"dtype": str, "nullable": False, "isin": ["Tech", "Energy", "Health"]},
+}
+
+report = nam_pla(df, spec)          # empty DataFrame if clean
+nam_pla(df, spec, strict=True)      # raises ValidationError if not
+```
+
+**Tests:** `tests/test_nam_pla.py`
+
+---
+
 ## Ergonomics & Infrastructure (Implemented)
 
-Three items from the former Priority 3 roadmap are now implemented.
+Four items from the former Priority 2/3 roadmap are now implemented.
 
 ### Pandas Accessor — `df.truck.*`
 
@@ -597,7 +664,8 @@ Registers `"truck"` as a pandas DataFrame accessor via
 `pd.api.extensions.register_dataframe_accessor`. Registration happens as an
 import side effect — `import thaitruck` (or importing anything from it) is
 enough; no separate call is required. Wraps `orange_chicken`, `larb`, `satay`,
-`fried_rice`, and `massaman` — thin delegation, no separate implementation.
+`fried_rice`, `massaman`, and `nam_pla` — thin delegation, no separate
+implementation.
 
 ```python
 import thaitruck
@@ -605,6 +673,7 @@ import thaitruck
 df.truck.orange_chicken(heat=3)
 df.truck.larb()
 df.truck.satay({"sector": "Tech"}, "price")
+df.truck.nam_pla({"price": {"min": 0}})
 ```
 
 ### `TruckPipeline` — Fluent API
@@ -635,7 +704,7 @@ result = (
 
 **File:** `src/thaitruck/exceptions.py`
 
-A shared, dependency-free leaf module defining `ThaiTruckError` (base) and three
+A shared, dependency-free leaf module defining `ThaiTruckError` (base) and four
 specific subclasses, each also inheriting the built-in exception type it
 replaces so existing `except ValueError` / `except TypeError` code keeps working:
 
@@ -645,11 +714,9 @@ replaces so existing `except ValueError` / `except TypeError` code keeps working
 | `DateColumnNotFound` | `ValueError` | `fried_rice` — no date column detected |
 | `InvalidHeatLevel` | `ValueError` | `orange_chicken`, `larb` — heat out of range |
 | `SkewTypeError` | `TypeError` | `satay` — unrecognised skewer type |
+| `ValidationError` | `ValueError` | `nam_pla` — schema violation, `strict=True` only |
 
-`ValidationError` (for the still-unbuilt `nam_pla`/`nam_prik`) is deferred until
-those modules exist.
-
-**Tests:** `tests/test_pipeline.py`, `tests/test_accessor.py`, `tests/test_exceptions.py`
+**Tests:** `tests/test_pipeline.py`, `tests/test_accessor.py`, `tests/test_exceptions.py`, `tests/test_nam_pla.py`
 
 ---
 
@@ -673,12 +740,12 @@ those modules exist.
 
 The original 7 utility modules remain fully independent — none imports from
 another. External dependencies are `pandas` and `numpy` only. `sticky_rice` and
-`tom_kha` use stdlib only. `massaman` joins them as an eighth independent
-utility module (`pandas` only).
+`tom_kha` use stdlib only. `massaman` and `nam_pla` join them as the eighth and
+ninth independent utility modules (`pandas`/`numpy` only).
 
 `exceptions` is a shared, dependency-free leaf module that `fried_rice`,
-`orange_chicken`, `larb`, and `satay` import for their error types — a common
-"errors live in one place" pattern, not a violation of utility-module
+`orange_chicken`, `larb`, `satay`, and `nam_pla` import for their error types —
+a common "errors live in one place" pattern, not a violation of utility-module
 independence (none of the utility modules import each other; they only import
 the shared leaf).
 
@@ -695,9 +762,10 @@ sticky_rice    → stdlib (pickle, hashlib, pathlib, time, functools)
 satay          → pandas, exceptions
 tom_kha        → stdlib only
 massaman       → pandas
+nam_pla        → pandas, numpy, exceptions
 exceptions     → stdlib only (leaf)
 pipeline       → fried_rice, orange_chicken, satay, massaman  (composition layer)
-accessor       → fried_rice, orange_chicken, larb, satay, massaman  (composition layer)
+accessor       → fried_rice, orange_chicken, larb, satay, massaman, nam_pla  (composition layer)
 ```
 
 ### Shared Patterns
@@ -732,6 +800,7 @@ tests/test_sticky_rice.py     ←→  src/thaitruck/sticky_rice.py
 tests/test_satay.py           ←→  src/thaitruck/satay.py
 tests/test_tom_kha.py         ←→  src/thaitruck/tom_kha.py
 tests/test_massaman.py        ←→  src/thaitruck/massaman.py
+tests/test_nam_pla.py         ←→  src/thaitruck/nam_pla.py
 tests/test_exceptions.py      ←→  src/thaitruck/exceptions.py
 tests/test_pipeline.py        ←→  src/thaitruck/pipeline.py
 tests/test_accessor.py        ←→  src/thaitruck/accessor.py
@@ -807,32 +876,10 @@ Add a `CHANGELOG.md` file tracking what changed per version — features, fixes,
 
 ### Priority 2: Validation & Alerting (Condiment Caddy)
 
-#### `nam_pla` — Data Validation Schema Enforcement
-
-A lightweight Pydantic / Great Expectations-style wrapper. Define a column schema spec and run it against any DataFrame to get a structured violations report.
-
-```python
-from thaitruck import nam_pla
-
-spec = {
-    "price":  {"dtype": float, "min": 0, "nullable": False},
-    "sector": {"dtype": str,   "nullable": False},
-}
-report = nam_pla(df, spec)  # raises on violation or returns report DataFrame
-```
-
-Conceptually related to `nam_prik` (below) — the distinction is weight: `nam_pla` is the heavier schema-enforcement engine; `nam_prik` is a lighter assertion layer. At implementation time, decide whether to merge them or keep both.
-
-#### `nam_prik` — Data Validation (Lighter Layer)
-
-A quicker assertion layer for spot-checks. Define expected column names, dtypes, value ranges, and null constraints as a "dipping sauce" spec. Intended for use in scripts where you want fast assertions without the overhead of a full schema engine.
-
-```python
-from thaitruck import nam_prik
-
-spec = {"price": {"dtype": float, "min": 0}, "sector": {"dtype": str, "nullable": False}}
-nam_prik(df, spec)
-```
+> **`nam_pla` is implemented** — see [Current Menu](#nam_pla--schema-validation)
+> above. `nam_prik` was merged into it rather than built separately (see the
+> scope decision in that section); `strict=True` covers the fast-fail-fast
+> spot-check use case `nam_prik` was meant for.
 
 #### `prik_nam_som` — Automated Alerting & Test-Suite Trigger
 
@@ -850,9 +897,9 @@ prik_nam_som(df, baseline=reference_df, thresholds={"row_drop_pct": 0.10})
 ### Priority 3: Ergonomics
 
 > **Implemented** — pandas accessor (`df.truck.*`), `TruckPipeline`, and the
-> `ThaiTruckError` hierarchy are done. See
+> full `ThaiTruckError` hierarchy (including `ValidationError`) are done. See
 > [Ergonomics & Infrastructure (Implemented)](#ergonomics--infrastructure-implemented)
-> above. Remaining: `ValidationError` is deferred until `nam_pla`/`nam_prik` exist.
+> above.
 
 ---
 
