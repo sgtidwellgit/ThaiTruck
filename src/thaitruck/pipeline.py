@@ -4,6 +4,7 @@ from typing import Any, Optional, Union
 
 import pandas as pd
 
+from thaitruck.dish_bucket import dish_bucket
 from thaitruck.fried_rice import fried_rice
 from thaitruck.massaman import massaman
 from thaitruck.orange_chicken import orange_chicken
@@ -76,6 +77,9 @@ class TruckPipeline:
         ops: Optional[list[str]] = None,
     ) -> "TruckPipeline":
         return TruckPipeline(massaman(self._df, column, window=window, ops=ops))
+
+    def dish_bucket(self, *, report: bool = False) -> "TruckPipeline":
+        return TruckPipeline(dish_bucket(self._df, report=report))
 
     def result(self) -> pd.DataFrame:
         return self._df

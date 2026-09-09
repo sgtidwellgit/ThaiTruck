@@ -66,6 +66,17 @@ class TestAccessorMethods:
         result = before.truck.som_tam(after, key="id")
         assert result.loc[1, "change_type"] == "modified"
 
+    def test_dish_bucket(self):
+        import numpy as np
+        df = pd.DataFrame({"a": np.array([1, 2, 3], dtype="int64")})
+        result = df.truck.dish_bucket()
+        assert result["a"].dtype.itemsize < df["a"].dtype.itemsize
+
+    def test_thai_roti(self, tmp_path):
+        df = pd.DataFrame({"price": [1.0]})
+        path = df.truck.thai_roti(format="html", path=tmp_path / "out.html")
+        assert path.exists()
+
     def test_does_not_mutate_original(self):
         df = pd.DataFrame({"Price": ["1.5"]})
         original_cols = list(df.columns)

@@ -56,6 +56,12 @@ class TestChaining:
         result = TruckPipeline(df).massaman("price", window=3, ops=["mean"]).result()
         assert "price_roll_mean_3" in result.columns
 
+    def test_dish_bucket_in_chain(self):
+        import numpy as np
+        df = pd.DataFrame({"a": np.array([1, 2, 3], dtype="int64")})
+        result = TruckPipeline(df).dish_bucket().result()
+        assert result["a"].dtype.itemsize < df["a"].dtype.itemsize
+
     def test_returns_dataframe(self):
         df = pd.DataFrame({"a": [1]})
         result = TruckPipeline(df).result()

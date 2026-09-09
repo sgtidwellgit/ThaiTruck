@@ -82,7 +82,7 @@ def sticky_rice(
         counts = {"hits": 0, "misses": 0}
 
         @functools.wraps(f)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs) -> Any:
             cache_key = _make_key(f, args, kwargs, key)
             path = _cache_path(resolved_dir, cache_key)
             hit, value = _read_cache(path, ttl, compress)
@@ -94,7 +94,7 @@ def sticky_rice(
             _write_cache(path, result, compress)
             return result
 
-        def clear():
+        def clear() -> None:
             """Delete all cache entries for this function."""
             prefix = key or f"{f.__module__}.{f.__qualname__}"
             for p in resolved_dir.glob("*.pkl"):

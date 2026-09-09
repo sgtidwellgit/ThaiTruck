@@ -10,6 +10,10 @@ from thaitruck.tom_kha import tom_kha
 from thaitruck.massaman import massaman
 from thaitruck.nam_pla import nam_pla
 from thaitruck.som_tam import som_tam
+from thaitruck.boat_noodles import boat_noodles
+from thaitruck.dish_bucket import dish_bucket
+from thaitruck.thai_roti import thai_roti
+from thaitruck.coconut_ice_cream import coconut_ice_cream
 from thaitruck.pipeline import TruckPipeline
 from thaitruck.exceptions import (
     ThaiTruckError,
@@ -33,6 +37,10 @@ __all__ = [
     "massaman",
     "nam_pla",
     "som_tam",
+    "boat_noodles",
+    "dish_bucket",
+    "thai_roti",
+    "coconut_ice_cream",
     "TruckPipeline",
     "ThaiTruckError",
     "DateColumnNotFound",

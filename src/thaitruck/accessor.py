@@ -5,10 +5,12 @@ registers the accessor as a side effect. It is not meant to be imported
 for its own exports.
 """
 
+from pathlib import Path
 from typing import Any, Optional, Union
 
 import pandas as pd
 
+from thaitruck.dish_bucket import dish_bucket
 from thaitruck.fried_rice import fried_rice
 from thaitruck.larb import larb
 from thaitruck.massaman import massaman
@@ -16,6 +18,7 @@ from thaitruck.nam_pla import nam_pla
 from thaitruck.orange_chicken import orange_chicken
 from thaitruck.satay import satay
 from thaitruck.som_tam import som_tam
+from thaitruck.thai_roti import thai_roti
 
 
 @pd.api.extensions.register_dataframe_accessor("truck")
@@ -93,3 +96,14 @@ class TruckAccessor:
         key: Optional[Union[str, list]] = None,
     ) -> pd.DataFrame:
         return som_tam(self._df, df_after, key=key)
+
+    def dish_bucket(self, *, report: bool = False) -> pd.DataFrame:
+        return dish_bucket(self._df, report=report)
+
+    def thai_roti(
+        self,
+        *,
+        format: str = "excel",
+        path: Union[str, Path, None] = None,
+    ) -> Path:
+        return thai_roti(self._df, format=format, path=path)

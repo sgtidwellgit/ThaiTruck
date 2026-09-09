@@ -4,6 +4,12 @@
   <img src="assets/ThaiTruckLogo.png" alt="ThaiTruck Logo" width="400"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/sgtidwellgit/ThaiTruck/actions/workflows/tests.yml">
+    <img src="https://github.com/sgtidwellgit/ThaiTruck/actions/workflows/tests.yml/badge.svg" alt="Tests">
+  </a>
+</p>
+
 **Spicy data blending and time-series DataFrame merging — Thai food truck style.**
 
 You've got six DataFrames. Three different date column names. Two frequencies.  
@@ -389,6 +395,80 @@ validated to have a unique row identity — duplicate keys raise.
 
 ---
 
+### `boat_noodles` — Sequential Chunked Processing
+
+*Read a large CSV in bowls, not the whole pot at once.*
+
+A thin wrapper over `pd.read_csv(..., chunksize=N)` that optionally applies a
+transform — often another ThaiTruck function — to each chunk as it's yielded.
+
+```python
+from thaitruck import boat_noodles, orange_chicken
+
+for chunk in boat_noodles("big_file.csv", chunksize=10_000, apply=orange_chicken):
+    process(chunk)
+```
+
+Any extra keyword arguments pass straight through to `pd.read_csv` (`sep=`,
+`encoding=`, etc.).
+
+---
+
+### `dish_bucket` — The Memory Optimizer
+
+*Keeps the truck nimble when the DataFrame gets massive.*
+
+Downcasts numeric columns to the smallest dtype that holds them safely —
+never a blind `float64 → float32`, always checked per column.
+
+```python
+from thaitruck import dish_bucket
+
+df = dish_bucket(df)                # returns a downcast copy
+dish_bucket(df, report=True)        # also prints before/after memory usage
+dish_bucket.flush()                 # gc.collect()
+```
+
+Available via `df.truck.dish_bucket()` and in a `TruckPipeline` chain.
+
+---
+
+### `thai_roti` — Finalized Output Formatter
+
+*The last step before the truck hands the meal to the customer.*
+
+Writes a finished DataFrame to Excel or HTML and returns the `Path` it wrote to.
+
+```python
+from thaitruck import thai_roti
+
+thai_roti(df, format="excel", path="output/report.xlsx")   # requires: pip install thaitruck[excel]
+thai_roti(df, format="html",  path="output/dashboard.html")
+```
+
+`format="od_summary"` from the original concept isn't implemented — its
+output schema was never pinned down, so it raises `NotImplementedError`
+rather than guessing.
+
+---
+
+### `coconut_ice_cream` — Post-Pipeline Cleanup
+
+*The palate cleanser.*
+
+```python
+from thaitruck import coconut_ice_cream
+
+coconut_ice_cream(clear_cache=True, flush_temp=True)
+```
+
+`clear_cache` deletes everything under the `sticky_rice` cache directory
+(default `.thaitruck_cache/`, or pass `cache_dir=` to match a custom one).
+`flush_temp` runs `gc.collect()`. The original concept's `reset_env=` isn't
+implemented — ThaiTruck holds no global environment state for it to reset.
+
+---
+
 ## The Heat Guide
 
 Most ThaiTruck functions accept a `heat` parameter (1–5). The metaphor is
@@ -410,7 +490,8 @@ consistent: higher heat is more aggressive.
 pip install thaitruck
 ```
 
-Requires Python ≥ 3.9 and pandas ≥ 1.5.
+Requires Python ≥ 3.9 and pandas ≥ 1.5. `thai_roti`'s Excel format needs the
+optional `openpyxl` dependency: `pip install thaitruck[excel]`.
 
 ---
 
@@ -439,11 +520,12 @@ result = (
 )
 ```
 
-`orange_chicken`, `larb`, `satay`, `fried_rice`, `massaman`, `nam_pla`, and
-`som_tam` are all callable either way — the accessor and pipeline are thin
-wrappers, not a new implementation. `larb`, `nam_pla`, and `som_tam` are
-accessor-only, not chainable through `TruckPipeline` — they return a report
-rather than a transformed version of the input.
+`orange_chicken`, `larb`, `satay`, `fried_rice`, `massaman`, `nam_pla`,
+`som_tam`, `dish_bucket`, and `thai_roti` are all callable either way — the
+accessor and pipeline are thin wrappers, not a new implementation. `larb`,
+`nam_pla`, `som_tam`, and `thai_roti` are accessor-only, not chainable through
+`TruckPipeline` — they return a report (or write a file) rather than a
+transformed version of the input.
 
 ---
 
@@ -493,6 +575,10 @@ from thaitruck import tom_kha        # deep config dict merging
 from thaitruck import massaman       # rolling aggregations and percentage change
 from thaitruck import nam_pla        # schema validation
 from thaitruck import som_tam        # DataFrame diffing
+from thaitruck import boat_noodles   # sequential chunked CSV processing
+from thaitruck import dish_bucket    # numeric downcasting for memory
+from thaitruck import thai_roti      # Excel / HTML output
+from thaitruck import coconut_ice_cream  # cache clearing and gc.collect()
 from thaitruck import TruckPipeline  # fluent chained pipeline
 ```
 

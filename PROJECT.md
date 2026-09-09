@@ -8,7 +8,7 @@
 
 1. [What ThaiTruck Is](#what-thaitruck-is)
 2. [Repository Layout](#repository-layout)
-3. [Current Menu — All 10 Modules](#current-menu--all-10-modules)
+3. [Current Menu — All 14 Modules](#current-menu--all-14-modules)
 4. [The Heat Guide](#the-heat-guide)
 5. [Architecture](#architecture)
 6. [Tests](#tests)
@@ -38,7 +38,7 @@ The flagship use-case is data engineering work that involves multiple DataFrames
 pip install thaitruck
 ```
 
-The library currently exports **10 functions plus the `TruckPipeline` fluent
+The library currently exports **14 functions plus the `TruckPipeline` fluent
 wrapper**, all accessible from the top-level namespace:
 
 ```python
@@ -52,6 +52,10 @@ from thaitruck import tom_kha         # deep config dict merging
 from thaitruck import massaman        # rolling aggregations and percentage change
 from thaitruck import nam_pla         # schema validation
 from thaitruck import som_tam         # DataFrame diffing
+from thaitruck import boat_noodles    # sequential chunked CSV processing
+from thaitruck import dish_bucket     # numeric downcasting for memory
+from thaitruck import thai_roti       # Excel / HTML output
+from thaitruck import coconut_ice_cream  # cache clearing and gc.collect()
 from thaitruck import TruckPipeline   # fluent chained pipeline
 ```
 
@@ -68,9 +72,12 @@ ThaiTruck/
 ├── README.md                   # user-facing install and usage guide
 ├── ARCHITECTURE.md             # technical architecture reference
 ├── PROJECT.md                  # this file — comprehensive project state + roadmap
+├── CHANGELOG.md                # per-version release notes
+├── .github/workflows/tests.yml # CI — pytest across Python 3.9-3.12, pandas 1.5.x/2.x
 ├── src/
 │   └── thaitruck/
 │       ├── __init__.py         # public re-exports + __version__
+│       ├── py.typed            # PEP 561 marker (confirmed present in built wheels)
 │       ├── fried_rice.py       # time-series DataFrame merger
 │       ├── orange_chicken.py   # DataFrame normalization / cleaning
 │       ├── larb.py             # statistical profiling
@@ -81,28 +88,39 @@ ThaiTruck/
 │       ├── massaman.py         # rolling aggregations and percentage change
 │       ├── nam_pla.py          # schema validation
 │       ├── som_tam.py          # DataFrame diffing
+│       ├── boat_noodles.py     # sequential chunked CSV processing
+│       ├── dish_bucket.py      # numeric downcasting for memory
+│       ├── thai_roti.py        # Excel / HTML output
+│       ├── coconut_ice_cream.py # cache clearing and gc.collect()
 │       ├── exceptions.py       # ThaiTruckError hierarchy (shared, leaf module)
 │       ├── pipeline.py         # TruckPipeline fluent wrapper (composition layer)
 │       └── accessor.py         # registers the `.truck` pandas accessor (composition layer)
-└── tests/
-    ├── test_fried_rice.py
-    ├── test_orange_chicken.py
-    ├── test_larb.py
-    ├── test_pad_thai.py
-    ├── test_sticky_rice.py
-    ├── test_satay.py
-    ├── test_tom_kha.py
-    ├── test_massaman.py
-    ├── test_nam_pla.py
-    ├── test_som_tam.py
-    ├── test_exceptions.py
-    ├── test_pipeline.py
-    └── test_accessor.py
+├── tests/
+│   ├── test_fried_rice.py
+│   ├── test_orange_chicken.py
+│   ├── test_larb.py
+│   ├── test_pad_thai.py
+│   ├── test_sticky_rice.py
+│   ├── test_satay.py
+│   ├── test_tom_kha.py
+│   ├── test_massaman.py
+│   ├── test_nam_pla.py
+│   ├── test_som_tam.py
+│   ├── test_boat_noodles.py
+│   ├── test_dish_bucket.py
+│   ├── test_thai_roti.py
+│   ├── test_coconut_ice_cream.py
+│   ├── test_exceptions.py
+│   ├── test_pipeline.py
+│   └── test_accessor.py
+└── benchmarks/                 # pytest-benchmark; not part of the default `pytest` run
+    ├── test_bench_fried_rice.py
+    └── test_bench_sticky_rice.py
 ```
 
 ---
 
-## Current Menu — All 10 Modules
+## Current Menu — All 14 Modules
 
 ---
 
@@ -764,6 +782,170 @@ diff.attrs["columns_added"]
 
 ---
 
+### `boat_noodles` — Sequential Chunked Processing
+
+**File:** `src/thaitruck/boat_noodles.py`
+
+**Signature:**
+
+```python
+def boat_noodles(
+    path: str | Path,
+    *,
+    chunksize: int = 10_000,
+    apply: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    **read_csv_kwargs,
+) -> Iterator[pd.DataFrame]
+```
+
+A generator — a thin wrapper over `pd.read_csv(path, chunksize=chunksize)`
+that applies `apply` to each chunk (if given) before yielding it.
+`**read_csv_kwargs` pass straight through to `pd.read_csv` (`sep=`,
+`encoding=`, etc.), so any CSV `read_csv` can handle, this can chunk.
+
+**Example:**
+
+```python
+from thaitruck import boat_noodles, orange_chicken
+
+for chunk in boat_noodles("big_file.csv", chunksize=10_000, apply=orange_chicken):
+    process(chunk)
+```
+
+**Tests:** `tests/test_boat_noodles.py`
+
+---
+
+### `dish_bucket` — DataFrame Memory Optimizer
+
+**File:** `src/thaitruck/dish_bucket.py`
+
+**Signature:**
+
+```python
+def dish_bucket(df: pd.DataFrame, *, report: bool = False) -> pd.DataFrame
+```
+
+**Current behavior:**
+
+- Downcasts numeric columns via `pd.to_numeric(..., downcast=...)` per
+  column — a column only shrinks as far as it can go safely (e.g. a float
+  column with out-of-range values for float32 stays float64). This is more
+  correct than a blind `float64 → float32` / `int64 → int32` cast, and
+  requires no manual range-checking.
+- `report=True` prints memory usage before/after and the percent reduction.
+- Never mutates the input.
+- `dish_bucket.flush()` runs `gc.collect()`. The original concept's phrasing
+  ("gc.collect() + clear temp refs") is simplified to just `gc.collect()` —
+  `dish_bucket` is a stateless function with no temp refs of its own to clear.
+- Wired into both the accessor (`df.truck.dish_bucket()`) and `TruckPipeline`
+  (`.dish_bucket()`) — it's a DataFrame-in/DataFrame-out transform like
+  `orange_chicken`, not a report-returning function like `larb`.
+
+**Example:**
+
+```python
+from thaitruck import dish_bucket
+
+df = dish_bucket(df)             # returns a downcast copy
+dish_bucket(df, report=True)     # also prints before/after memory usage
+dish_bucket.flush()              # gc.collect()
+```
+
+**Tests:** `tests/test_dish_bucket.py`
+
+---
+
+### `thai_roti` — Finalized Output Formatter
+
+**File:** `src/thaitruck/thai_roti.py`
+
+**Signature:**
+
+```python
+def thai_roti(
+    df: pd.DataFrame,
+    *,
+    format: str = "excel",
+    path: str | Path | None = None,
+) -> Path
+```
+
+**Current behavior:**
+
+- `format="excel"` (`df.to_excel`) requires the optional `openpyxl`
+  dependency — `pip install thaitruck[excel]`; raises a clear `ImportError`
+  with that install instructions if missing.
+- `format="html"` (`df.to_html`) has no extra dependency.
+- `path` is required for both; parent directories are created automatically.
+- Returns the `Path` written to.
+- **Not implemented:** `format="od_summary"` raises `NotImplementedError`.
+  The original concept ("returns structured origin-destination dict") never
+  specified what fields an OD summary should contain — that's a genuine
+  design question, not a mechanical gap, so it wasn't guessed at here.
+- Available via the accessor (`df.truck.thai_roti(...)`); excluded from
+  `TruckPipeline` since it writes a file and returns a `Path`, not a
+  DataFrame to keep chaining on.
+
+**Example:**
+
+```python
+from thaitruck import thai_roti
+
+thai_roti(df, format="excel", path="output/report.xlsx")
+thai_roti(df, format="html", path="output/dashboard.html")
+```
+
+**Tests:** `tests/test_thai_roti.py`
+
+---
+
+### `coconut_ice_cream` — Post-Pipeline Cleanup
+
+**File:** `src/thaitruck/coconut_ice_cream.py`
+
+**Signature:**
+
+```python
+def coconut_ice_cream(
+    *,
+    clear_cache: bool = False,
+    flush_temp: bool = False,
+    cache_dir: str | Path | None = None,
+) -> None
+```
+
+**Current behavior:**
+
+- `clear_cache=True` deletes everything under `cache_dir` (default:
+  `sticky_rice`'s default `.thaitruck_cache/`). This is a directory-level
+  operation, not a per-function one — `sticky_rice` keeps no global registry
+  of every function it has decorated, so there's no way to call each one's
+  own `.clear()` from here.
+- `flush_temp=True` runs `gc.collect()`.
+- `cache_dir` isn't in the original bare signature
+  (`coconut_ice_cream(clear_cache=True, flush_temp=True, reset_env=True)`) —
+  it was added because `clear_cache` is otherwise useless for anyone who gave
+  `sticky_rice` a non-default `cache_dir`.
+- **Not implemented:** `reset_env=True` from the original concept ("resets
+  the environment back to a clean state"). ThaiTruck holds no global
+  environment or config state, so there's nothing concrete for it to do —
+  passing it is not supported rather than silently accepted and ignored.
+- Duplicates `sticky_rice`'s default cache path as its own constant rather
+  than importing `sticky_rice`, preserving utility-module independence.
+
+**Example:**
+
+```python
+from thaitruck import coconut_ice_cream
+
+coconut_ice_cream(clear_cache=True, flush_temp=True)
+```
+
+**Tests:** `tests/test_coconut_ice_cream.py`
+
+---
+
 ## Ergonomics & Infrastructure (Implemented)
 
 Four items from the former Priority 2/3 roadmap are now implemented.
@@ -776,8 +958,9 @@ Registers `"truck"` as a pandas DataFrame accessor via
 `pd.api.extensions.register_dataframe_accessor`. Registration happens as an
 import side effect — `import thaitruck` (or importing anything from it) is
 enough; no separate call is required. Wraps `orange_chicken`, `larb`, `satay`,
-`fried_rice`, `massaman`, `nam_pla`, and `som_tam` — thin delegation, no
-separate implementation. Each wrapper method's signature mirrors its underlying
+`fried_rice`, `massaman`, `nam_pla`, `som_tam`, `dish_bucket`, and `thai_roti`
+— thin delegation, no separate implementation. Each wrapper method's signature
+mirrors its underlying
 function exactly (e.g. `df.truck.orange_chicken(heat=3, rename=..., dtypes=...)`,
 `df.truck.fried_rice(other_df, join="inner", ...)`), so a new parameter on the
 function requires a matching update here — there's no `**kwargs` passthrough.
@@ -798,10 +981,11 @@ df.truck.nam_pla({"price": {"min": 0}})
 A chainable wrapper around a DataFrame. Each method returns a new
 `TruckPipeline` instance wrapping the transformed DataFrame; `.result()` unwraps
 back to a plain `pd.DataFrame`. Covers `orange_chicken`, `fried_rice`, `satay`,
-and `massaman` (the DataFrame-in/DataFrame-out functions). `larb` is
-intentionally excluded — it returns a per-column profile, not a transformed
-version of the input, so it doesn't fit the chain's "keep transforming the same
-data" semantics; call it standalone or via the accessor for a spot-check.
+`massaman`, and `dish_bucket` (the DataFrame-in/DataFrame-out functions).
+`larb`, `nam_pla`, `som_tam`, and `thai_roti` are intentionally excluded —
+each returns a report (or writes a file) rather than a transformed version of
+the input, so none fit the chain's "keep transforming the same data"
+semantics; call them standalone or via the accessor instead.
 
 ```python
 from thaitruck import TruckPipeline
@@ -855,34 +1039,40 @@ replaces so existing `except ValueError` / `except TypeError` code keeps working
 
 The original 7 utility modules remain fully independent — none imports from
 another. External dependencies are `pandas` and `numpy` only. `sticky_rice` and
-`tom_kha` use stdlib only. `massaman`, `nam_pla`, and `som_tam` join them as
-the eighth, ninth, and tenth independent utility modules (`pandas`/`numpy`
-only).
+`tom_kha` use stdlib only. `massaman`, `nam_pla`, `som_tam`, `boat_noodles`,
+`dish_bucket`, `thai_roti`, and `coconut_ice_cream` join them as 7 more
+independent utility modules — 14 total, none importing another.
 
 `exceptions` is a shared, dependency-free leaf module that `fried_rice`,
 `orange_chicken`, `larb`, `satay`, and `nam_pla` import for their error types —
 a common "errors live in one place" pattern, not a violation of utility-module
 independence (none of the utility modules import each other; they only import
-the shared leaf).
+the shared leaf). `coconut_ice_cream` duplicates `sticky_rice`'s default cache
+path as its own constant rather than importing `sticky_rice`, for the same
+reason.
 
 `pipeline` and `accessor` are a separate **composition layer**, analogous to
 `__init__.py`'s re-exports: their entire purpose is to call the utility modules,
 so they intentionally depend on several of them.
 
 ```
-fried_rice     → pandas, numpy, exceptions
-orange_chicken → pandas, exceptions
-larb           → pandas, exceptions
-pad_thai       → pandas
-sticky_rice    → stdlib (pickle, hashlib, pathlib, time, functools)
-satay          → pandas, exceptions
-tom_kha        → stdlib only
-massaman       → pandas
-nam_pla        → pandas, numpy, exceptions
-som_tam        → pandas
-exceptions     → stdlib only (leaf)
-pipeline       → fried_rice, orange_chicken, satay, massaman  (composition layer)
-accessor       → fried_rice, orange_chicken, larb, satay, massaman, nam_pla, som_tam  (composition layer)
+fried_rice        → pandas, numpy, exceptions
+orange_chicken    → pandas, exceptions
+larb              → pandas, exceptions
+pad_thai          → pandas
+sticky_rice       → stdlib (pickle, hashlib, pathlib, time, functools, gzip)
+satay             → pandas, exceptions
+tom_kha           → stdlib only
+massaman          → pandas
+nam_pla           → pandas, numpy, exceptions
+som_tam           → pandas
+boat_noodles      → pandas
+dish_bucket       → stdlib (gc), pandas
+thai_roti         → stdlib (pathlib), pandas [+ openpyxl for format="excel"]
+coconut_ice_cream → stdlib (gc, shutil, pathlib)
+exceptions        → stdlib only (leaf)
+pipeline          → fried_rice, orange_chicken, satay, massaman, dish_bucket  (composition layer)
+accessor          → fried_rice, orange_chicken, larb, satay, massaman, nam_pla, som_tam, dish_bucket, thai_roti  (composition layer)
 ```
 
 ### Shared Patterns
@@ -919,19 +1109,32 @@ tests/test_tom_kha.py         ←→  src/thaitruck/tom_kha.py
 tests/test_massaman.py        ←→  src/thaitruck/massaman.py
 tests/test_nam_pla.py         ←→  src/thaitruck/nam_pla.py
 tests/test_som_tam.py         ←→  src/thaitruck/som_tam.py
+tests/test_boat_noodles.py    ←→  src/thaitruck/boat_noodles.py
+tests/test_dish_bucket.py     ←→  src/thaitruck/dish_bucket.py
+tests/test_thai_roti.py       ←→  src/thaitruck/thai_roti.py
+tests/test_coconut_ice_cream.py ←→ src/thaitruck/coconut_ice_cream.py
 tests/test_exceptions.py      ←→  src/thaitruck/exceptions.py
 tests/test_pipeline.py        ←→  src/thaitruck/pipeline.py
 tests/test_accessor.py        ←→  src/thaitruck/accessor.py
 ```
 
-`sticky_rice` tests use pytest's `tmp_path` fixture to isolate cache files per test run (no `.thaitruck_cache/` pollution). `unittest.mock.patch` is used for time-based TTL testing.
+`sticky_rice` tests use pytest's `tmp_path` fixture to isolate cache files per test run (no `.thaitruck_cache/` pollution). `unittest.mock.patch` is used for time-based TTL testing. `test_dish_bucket.py` and `test_coconut_ice_cream.py` patch `gc.collect` via `importlib.import_module("thaitruck.<module>")` rather than a dotted monkeypatch string — `thaitruck/__init__.py` re-exports each module's function under the same name, so `thaitruck.dish_bucket` resolves to the *function*, not the module, and `import thaitruck.dish_bucket as x` (which does `x = thaitruck.dish_bucket` under the hood) would silently bind to the function too.
+
+`pyproject.toml` sets `[tool.pytest.ini_options] testpaths = ["tests"]`, so a
+bare `pytest` never picks up `benchmarks/` — run those explicitly with
+`pytest benchmarks/`.
 
 Run tests:
 
 ```bash
-pip install thaitruck[dev]
-pytest
+pip install thaitruck[dev,excel]
+pytest              # main suite (255 tests as of this writing)
+pytest benchmarks/  # pytest-benchmark, run separately
 ```
+
+CI (`.github/workflows/tests.yml`) runs the main suite on a matrix of Python
+3.9–3.12 × pandas 1.5.x/2.x (Python 3.12 × pandas 1.5 excluded — pandas 1.5
+predates 3.12 support). It does not run `benchmarks/`.
 
 ---
 
@@ -946,6 +1149,9 @@ twine upload dist/*        # publish to PyPI
 Bump the version in exactly two places before each release:
 - `pyproject.toml` → `version = "x.y.z"`
 - `src/thaitruck/__init__.py` → `__version__ = "x.y.z"`
+
+Move the `[Unreleased]` section of `CHANGELOG.md` under a new `[x.y.z] - date`
+heading as part of the same release.
 
 ---
 
@@ -971,24 +1177,32 @@ Priorities are ordered by impact and maturity. Each item is tagged with its conc
 
 ### Priority 1: Infrastructure & Quality Gates
 
+> **Implemented (2026-09-09)** — all four items below are done.
+
 #### CI/CD — GitHub Actions
 
-Add `.github/workflows/tests.yml` to run `pytest` on every push and pull request. Test matrix:
-
-- Python versions: 3.9, 3.10, 3.11, 3.12
-- Pandas versions: 1.5.x, 2.x
+✅ `.github/workflows/tests.yml` runs `pytest` on push/PR to `main` across
+Python 3.9–3.12 × pandas 1.5.x/2.x (Python 3.12 × pandas 1.5 excluded, since
+pandas 1.5 predates 3.12 support).
 
 #### Type Stubs
 
-Add a `py.typed` marker file (PEP 561) and fill in any inline type annotations that are missing. This enables IDE type checking for consumers of the library.
+✅ `src/thaitruck/py.typed` (PEP 561) added and confirmed present in a built
+wheel (`python -m build --wheel` then inspected). Return-type annotations were
+missing on two internal closures in `sticky_rice.wrapper`/`.clear()` — filled
+in; everything else already had full annotations.
 
 #### Benchmarks
 
-Add a `benchmarks/` directory using `pytest-benchmark` to catch performance regressions between releases. Focus on `fried_rice` (resample + merge paths) and `sticky_rice` (cache read/write).
+✅ `benchmarks/test_bench_fried_rice.py` and `benchmarks/test_bench_sticky_rice.py`,
+using `pytest-benchmark` (added to the `dev` extra). Not part of the default
+`pytest` run — see [Tests](#tests) above for why and how to run them
+separately.
 
 #### CHANGELOG.md
 
-Add a `CHANGELOG.md` file tracking what changed per version — features, fixes, breaking changes.
+✅ `CHANGELOG.md` added, backfilled from git history, with an `[Unreleased]`
+section for everything built this session.
 
 ---
 
@@ -1070,16 +1284,9 @@ prik_nam_som(df, baseline=reference_df, thresholds={"row_drop_pct": 0.10})
 > above. The row-identity design question (`key=` vs. auto-detection) is
 > resolved there; schema drift surfaces via `.attrs`, not as table rows.
 
-#### `boat_noodles` — Sequential Chunked Processing
-
-Process large files in chunks without loading everything into memory. Wraps `pd.read_csv(..., chunksize=N)` and auto-applies other ThaiTruck functions per chunk. Sequential (single-threaded). See `chicken_satay` for the async/parallel version.
-
-```python
-from thaitruck import boat_noodles
-
-for chunk in boat_noodles("big_file.csv", chunksize=10_000, apply=orange_chicken):
-    process(chunk)
-```
+> **`boat_noodles` is implemented** — see the [Current Menu](#boat_noodles--sequential-chunked-processing)
+> above. `chicken_satay` (the async/parallel counterpart) remains planned —
+> see Priority 9.
 
 #### `green_curry` — Recipe-Based Transforms
 
@@ -1099,45 +1306,24 @@ result = green_curry(df, recipe={
 
 ### Priority 6: Memory Management
 
-#### `dish_bucket` (a.k.a. `dish_soap`) — DataFrame Memory Optimizer
-
-Keeps the truck nimble when dealing with massive DataFrames. Downcasts numeric types (`float64 → float32`, `int64 → int32`) and optionally runs `gc.collect()` to reclaim memory.
-
-```python
-from thaitruck import dish_bucket
-
-df = dish_bucket(df)             # returns optimized DataFrame
-dish_bucket(df, report=True)     # prints before/after memory usage
-dish_bucket.flush()              # gc.collect() + clear temp refs
-```
-
-Name TBD between `dish_bucket` and `dish_soap` — both work thematically.
+> **`dish_bucket` is implemented** — see the [Current Menu](#dish_bucket--dataframe-memory-optimizer)
+> above. Name decided in favor of `dish_bucket` over `dish_soap`. Downcasting
+> uses `pd.to_numeric(..., downcast=...)` rather than a blind
+> `float64 → float32` / `int64 → int32` cast, so it never silently loses
+> precision or overflows. `.flush()` simplifies "gc.collect() + clear temp
+> refs" to just `gc.collect()` — there are no temp refs in a stateless
+> function to clear.
 
 ---
 
 ### Priority 7: Output & Reporting
 
-#### `thai_roti` — Finalized Output Formatter
-
-The last step before the truck hands the meal to the customer. Wraps a finished DataFrame into a polished, deliverable format.
-
-```python
-from thaitruck import thai_roti
-
-thai_roti(df, format="excel", path="output/report.xlsx")   # requires openpyxl
-thai_roti(df, format="html",  path="output/dashboard.html")
-thai_roti(df, format="od_summary")   # returns structured origin-destination dict
-```
-
-#### `coconut_ice_cream` — Post-Pipeline Cleanup
-
-The palate cleanser. Post-pipeline cleanup function that flushes temporary storage, clears the `sticky_rice` cache on command, and resets the environment back to a clean state.
-
-```python
-from thaitruck import coconut_ice_cream
-
-coconut_ice_cream(clear_cache=True, flush_temp=True, reset_env=True)
-```
+> **`thai_roti` and `coconut_ice_cream` are implemented** — see the
+> [Current Menu](#thai_roti--finalized-output-formatter) above.
+> `thai_roti(format="od_summary")` raises `NotImplementedError` rather than
+> guessing at an output schema that was never specified.
+> `coconut_ice_cream`'s `reset_env=True` is not supported — ThaiTruck has no
+> global environment state for it to reset.
 
 ---
 
