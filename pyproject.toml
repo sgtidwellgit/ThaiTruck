@@ -4,14 +4,28 @@ build-backend = "hatchling.build"
 
 [project]
 name = "thaitruck"
-version = "0.2.2"
+version = "0.3.0"
 description = "Spicy data blending and time-series DataFrame merging — Thai food truck style."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dependencies = [
     "pandas>=1.5",
     "numpy>=1.23",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +34,7 @@ excel = ["openpyxl>=3.0"]
 
 [project.urls]
 Homepage = "https://github.com/sgtidwellgit/ThaiTruck"
+Changelog = "https://github.com/sgtidwellgit/ThaiTruck/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/thaitruck"]

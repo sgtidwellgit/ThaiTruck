@@ -1,6 +1,6 @@
 # ThaiTruck — Project Document
 
-> **Current version:** 0.2.2 | **PyPI:** `pip install thaitruck` | **Python:** ≥ 3.9 | **Pandas:** ≥ 1.5
+> **Current version:** 0.3.0 | **PyPI:** `pip install thaitruck` | **Python:** ≥ 3.9 | **Pandas:** ≥ 1.5
 
 ---
 
@@ -73,6 +73,7 @@ ThaiTruck/
 ├── ARCHITECTURE.md             # technical architecture reference
 ├── PROJECT.md                  # this file — comprehensive project state + roadmap
 ├── CHANGELOG.md                # per-version release notes
+├── LICENSE                     # MIT
 ├── .github/workflows/tests.yml # CI — pytest across Python 3.9-3.12, pandas 1.5.x/2.x
 ├── src/
 │   └── thaitruck/
@@ -1161,7 +1162,7 @@ ThaiTruck is part of a broader "food truck fleet" of PyPI packages, each with it
 
 | Package | Status | Focus |
 |---|---|---|
-| **thaitruck** | Live on PyPI (v0.2.2) | Batch DataFrame cleaning, merging, profiling, caching |
+| **thaitruck** | Live on PyPI (v0.3.0) | Batch DataFrame cleaning, merging, profiling, caching |
 | **sushitruck** | PyPI name secured (v0.1.0 stub) | Streaming ingestion, REST API connectors, file reading, normalization |
 | **ramentruck** | PyPI name secured (v0.1.0 stub) | ML/AI toolkit — training, tuning, explainability, deep learning |
 

@@ -15,6 +15,7 @@ ThaiTruck/
 ├── README.md
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
+├── LICENSE                     # MIT
 ├── .github/workflows/tests.yml # CI
 ├── src/
 │   └── thaitruck/

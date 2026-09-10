@@ -24,7 +24,7 @@ from thaitruck.exceptions import (
 )
 from thaitruck import accessor  # noqa: F401  registers the `.truck` DataFrame accessor
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 __all__ = [
     "fried_rice",

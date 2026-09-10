@@ -3,7 +3,7 @@
 All notable changes to ThaiTruck are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-09
 
 ### Added
 
@@ -38,6 +38,27 @@ All notable changes to ThaiTruck are documented here. Format loosely follows
 - CI: GitHub Actions running pytest across Python 3.9–3.12 and pandas 1.5.x/2.x
 - `benchmarks/` — pytest-benchmark coverage for `fried_rice` and `sticky_rice`
   (not part of the default `pytest` run; `pytest benchmarks/` to run them)
+
+### Fixed
+
+- `tom_kha` used `dict[str, Any] | None` (PEP 604 union syntax), which
+  requires Python ≥3.10 to evaluate — broke every `import thaitruck` on
+  Python 3.9. Pre-existing bug; nothing caught it until CI was added.
+- `test_sticky_rice.py`'s `mock.patch` on a dotted path hit a real CPython
+  bug (fixed upstream in 3.11) that surfaces whenever a package re-exports a
+  submodule's function under the submodule's own name, as `__init__.py`
+  does throughout this package
+- A test used `freq="QE"`, a pandas ≥2.2-only alias; switched to `"Q"`,
+  which works identically on pandas 1.5 and 2.x
+- CI installed a version-unconstrained `pandas` and then force-downgraded it
+  in a second step, which could leave an ABI-incompatible `numpy` in place
+  for the `pandas==1.5.*` matrix leg; now pinned to `numpy<2` for that leg
+  and installed together with the package in one resolved step
+
+### Changed
+
+- Added a proper `LICENSE` file (previously only declared in
+  `pyproject.toml`, not shipped as a file) and PyPI classifiers
 
 ### Known gaps (deliberately deferred — need a design decision)
 
