@@ -54,6 +54,10 @@ All notable changes to ThaiTruck are documented here. Format loosely follows
   in a second step, which could leave an ABI-incompatible `numpy` in place
   for the `pandas==1.5.*` matrix leg; now pinned to `numpy<2` for that leg
   and installed together with the package in one resolved step
+- The sdist was pulling in an untracked local `.claude/settings.local.json`
+  (a known recurrence — the same class of leak already fixed in RamenTruck)
+  plus `.github/` and the README's image `assets/`, bloating it to 2.4MB for
+  no reason; excluded all three via `[tool.hatch.build] exclude`, down to 61KB
 
 ### Changed
 

@@ -36,6 +36,13 @@ excel = ["openpyxl>=3.0"]
 Homepage = "https://github.com/sgtidwellgit/ThaiTruck"
 Changelog = "https://github.com/sgtidwellgit/ThaiTruck/blob/main/CHANGELOG.md"
 
+[tool.hatch.build]
+exclude = [
+    ".claude/",
+    ".github/",
+    "assets/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/thaitruck"]
 
