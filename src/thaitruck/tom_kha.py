@@ -1,6 +1,6 @@
 """tom_kha — deep config merging with sensible coconut-milk defaults."""
 
-from typing import Any
+from typing import Any, Optional
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -13,7 +13,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def tom_kha(*configs: dict[str, Any], defaults: dict[str, Any] | None = None) -> dict[str, Any]:
+def tom_kha(*configs: dict[str, Any], defaults: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Deep-merge N config dicts, applying defaults for any missing keys.
 
     Later dicts take precedence. Nested dicts are merged recursively rather

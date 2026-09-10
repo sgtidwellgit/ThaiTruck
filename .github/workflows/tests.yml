@@ -29,7 +29,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,excel]" "pandas==${{ matrix.pandas-version }}"
+          if [ "${{ matrix.pandas-version }}" = "1.5.*" ]; then
+            # pandas 1.5's compiled extensions are ABI-incompatible with
+            # numpy>=2.0. Its own dependency metadata predates numpy 2.0's
+            # release, so it declares no upper bound and pip will happily
+            # resolve numpy 2.x anyway, which crashes at import time. Pin
+            # numpy explicitly for this leg only.
+            pip install -e ".[dev,excel]" "pandas==1.5.*" "numpy<2"
+          else
+            pip install -e ".[dev,excel]" "pandas==${{ matrix.pandas-version }}"
+          fi
 
       - name: Run tests
         run: pytest

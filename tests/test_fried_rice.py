@@ -58,7 +58,10 @@ class TestDateColDetection:
 
 class TestFrequencyResampling:
     def test_quarterly_upsampled_to_daily(self):
-        dates = pd.date_range("2024-01-01", periods=4, freq="QE")
+        # "Q" (not "QE") on purpose: "QE" doesn't exist before pandas 2.2,
+        # "Q" works everywhere ThaiTruck supports (pandas>=1.5) — deprecated
+        # but functional on pandas 2.x, native on 1.5.
+        dates = pd.date_range("2024-01-01", periods=4, freq="Q")
         quarterly = pd.DataFrame({"eps": [1.0, 1.2, 1.1, 1.3]}, index=dates)
         daily_prices = daily({"price": range(365)}, start="2024-01-01")
         result = fried_rice(quarterly, daily_prices, freq="D")

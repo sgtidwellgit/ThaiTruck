@@ -1,9 +1,18 @@
+import importlib
 import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from thaitruck import sticky_rice
+
+# thaitruck/__init__.py re-exports `sticky_rice` (the function) under the
+# same name, shadowing the `thaitruck.sticky_rice` submodule as a package
+# attribute. On Python < 3.11, unittest.mock.patch("thaitruck.sticky_rice.time")
+# resolves that dotted path via getattr and silently picks up the shadowed
+# function instead of re-importing the submodule, then fails looking for
+# `.time` on it. Resolving the submodule explicitly side-steps this.
+sticky_rice_module = importlib.import_module("thaitruck.sticky_rice")
 
 
 @pytest.fixture
@@ -64,7 +73,7 @@ class TestTTL:
             call_count += 1
             return x
 
-        with patch("thaitruck.sticky_rice.time") as mock_time:
+        with patch.object(sticky_rice_module, "time") as mock_time:
             mock_time.time.return_value = 1000.0
             fn(1)
             assert call_count == 1
@@ -82,7 +91,7 @@ class TestTTL:
             call_count += 1
             return x
 
-        with patch("thaitruck.sticky_rice.time") as mock_time:
+        with patch.object(sticky_rice_module, "time") as mock_time:
             mock_time.time.return_value = 1000.0
             fn(1)
             mock_time.time.return_value = 9999999.0
